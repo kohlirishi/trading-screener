@@ -707,11 +707,23 @@ function realizedPnL() {
 // TRADE LOGIC
 // ═══════════════════════════════════════════════════════
 function isAlreadyHolding(ticker) {
-  return STATE.trades.some(t => t.ticker === ticker && t.status === 'live');
+  return STATE.trades.some(t => t.ticker === ticker && (t.status === 'live' || t.status === 'partial'));
+}
+
+function isInCooldown(ticker) {
+  // Block re-entry for 24h after a stop loss exit
+  const now = Date.now();
+  return STATE.trades.some(t => {
+    if (t.ticker !== ticker || t.exitReason !== 'loss') return false;
+    if (!t.sellDate || !t.sellTime) return false;
+    const sellMs = new Date(`${t.sellDate}T${t.sellTime}:00`).getTime();
+    return (now - sellMs) < 24 * 60 * 60 * 1000;
+  });
 }
 
 function createTrade(ticker, type, prob, price, runTime) {
-  if (isAlreadyHolding(ticker)) return null;          // already live
+  if (isAlreadyHolding(ticker)) return null;          // already live / partial
+  if (isInCooldown(ticker))    return null;           // stopped out within 24h
   if (availableCapital() < TRADE_SIZE) return null;   // capital exhausted
 
   const shares = TRADE_SIZE / price;
@@ -769,7 +781,7 @@ function closeTrade(trade, price, reason) {
 
 function manualClose(tradeId) {
   const t = STATE.trades.find(x => x.id === tradeId);
-  if (!t || t.status !== 'live') return;
+  if (!t || (t.status !== 'live' && t.status !== 'partial')) return;
   const price = t.currentPrice || t.buyPrice;
   closeTrade(t, price, 'manual');
   saveState();
@@ -798,7 +810,10 @@ async function monitorPositions() {
         // ── Update trailing stop ─────────────────────────────
         if (price > (trade.highestPrice || trade.buyPrice)) {
           trade.highestPrice = price;
-          trade.trailingStop = +(price * (1 - STOP_LOSS)).toFixed(4);
+          const rawStop = price * (1 - STOP_LOSS);
+          // After partial exit, stop floor is entry price (breakeven)
+          const floor = trade.partialExitDone ? trade.buyPrice : 0;
+          trade.trailingStop = +(Math.max(rawStop, floor)).toFixed(4);
         }
 
         const chgFromBuy = (price - trade.buyPrice) / trade.buyPrice * 100;
@@ -813,7 +828,9 @@ async function monitorPositions() {
           trade.partialExitPnl   = +((price - trade.buyPrice) * halfShares).toFixed(2);
           trade.sharesOpen       = halfShares;
           trade.status           = 'partial';
-          notify(`⚡ Partial exit: ${trade.ticker} +${chgFromBuy.toFixed(2)}% — sold 50% at $${price.toFixed(2)} (+$${trade.partialExitPnl.toFixed(2)})`);
+          // ── Breakeven floor: trailing stop can never fall below entry ──
+          trade.trailingStop     = Math.max(trade.trailingStop, trade.buyPrice);
+          notify(`⚡ Partial exit: ${trade.ticker} +${chgFromBuy.toFixed(2)}% — sold 50% at $${price.toFixed(2)} (+$${trade.partialExitPnl.toFixed(2)}) · Stop locked to breakeven $${trade.buyPrice.toFixed(2)}`);
           changed = true;
         }
 

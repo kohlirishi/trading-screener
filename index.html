@@ -260,6 +260,27 @@
   .empty-state svg { margin-bottom: 12px; opacity: 0.4; }
   .empty-state p { font-size: 14px; }
 
+  /* MINIMIZE BUTTON */
+  .minimize-btn {
+    background: #21262d;
+    border: 1px solid #30363d;
+    color: #8b949e;
+    border-radius: 6px;
+    width: 30px;
+    height: 30px;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, color 0.15s;
+    flex-shrink: 0;
+  }
+  .minimize-btn:hover { background: #30363d; color: #f0f6fc; }
+  .table-wrap.minimized { display: none; }
+  .table-section.minimized .table-wrap { display: none; }
+
   /* FOOTER */
   .footer {
     text-align: center;
@@ -313,15 +334,18 @@
 <div class="main">
 
   <!-- TABLE 1 -->
-  <div class="table-section">
+  <div class="table-section" id="t1Section">
     <div class="table-header">
       <div class="table-title ath">
         &#9733; Near ATH — EMA Reclaim
         <span class="badge" id="t1Badge">0</span>
       </div>
-      <button class="export-btn" onclick="exportCSV('ath')">&#8595; Export CSV</button>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="export-btn" onclick="exportCSV('ath')">&#8595; Export CSV</button>
+        <button class="minimize-btn" id="t1MinBtn" onclick="togglePanel('t1')" title="Minimize">&#8722;</button>
+      </div>
     </div>
-    <div class="table-wrap">
+    <div class="table-wrap" id="t1Wrap">
       <table id="t1Table">
         <thead>
           <tr>
@@ -338,15 +362,18 @@
   </div>
 
   <!-- TABLE 2 -->
-  <div class="table-section">
+  <div class="table-section" id="t2Section">
     <div class="table-header">
       <div class="table-title swing">
         &#9650; Swing High — EMA Reclaim
         <span class="badge" id="t2Badge">0</span>
       </div>
-      <button class="export-btn" onclick="exportCSV('swing')">&#8595; Export CSV</button>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="export-btn" onclick="exportCSV('swing')">&#8595; Export CSV</button>
+        <button class="minimize-btn" id="t2MinBtn" onclick="togglePanel('t2')" title="Minimize">&#8722;</button>
+      </div>
     </div>
-    <div class="table-wrap">
+    <div class="table-wrap" id="t2Wrap">
       <table id="t2Table">
         <thead>
           <tr>
@@ -378,7 +405,6 @@ const MA_BUFFER           = 0.003;
 const ATH_THRESHOLD       = 0.05;
 const MAX_RECLAIM_BARS    = 60;
 const MAX_BELOW_BARS      = 10;
-const UPTREND_LOOKBACK    = 60;
 const SWING_HIGH_MIN_BARS = 126;
 const SWING_HIGH_MAX_BARS = 378;
 const SWING_NEAR_MIN      = 0.01;
@@ -581,7 +607,7 @@ function findValidReclaim(c, mu, md) {
 // ─── SCREEN ATH ──────────────────────────────────────────────────────────────
 function screenATH(ohlcv) {
   const n = ohlcv.length;
-  if (n < EMA_PERIOD + UPTREND_LOOKBACK + 10) return null;
+  if (n < EMA_PERIOD + 10) return null;
 
   const closes = ohlcv.map(d => d.close);
   const highs  = ohlcv.map(d => d.high);
@@ -590,9 +616,6 @@ function screenATH(ohlcv) {
   const ema = calcEMA(closes, EMA_PERIOD);
   const mu  = ema.map(e => e * (1 + MA_BUFFER));
   const md  = ema.map(e => e * (1 - MA_BUFFER));
-
-  // Uptrend filter
-  if (closes[n - 1] <= closes[n - 1 - UPTREND_LOOKBACK]) return null;
 
   const reclaim = findValidReclaim(closes, mu, md);
   if (!reclaim) return null;
@@ -625,7 +648,7 @@ function screenATH(ohlcv) {
 // ─── SCREEN SWING ────────────────────────────────────────────────────────────
 function screenSwing(ohlcv, athTickersSet) {
   const n = ohlcv.length;
-  if (n < EMA_PERIOD + UPTREND_LOOKBACK + 10) return null;
+  if (n < EMA_PERIOD + 10) return null;
 
   const closes = ohlcv.map(d => d.close);
   const highs  = ohlcv.map(d => d.high);
@@ -634,9 +657,6 @@ function screenSwing(ohlcv, athTickersSet) {
   const ema = calcEMA(closes, EMA_PERIOD);
   const mu  = ema.map(e => e * (1 + MA_BUFFER));
   const md  = ema.map(e => e * (1 - MA_BUFFER));
-
-  // Uptrend filter
-  if (closes[n - 1] <= closes[n - 1 - UPTREND_LOOKBACK]) return null;
 
   const reclaim = findValidReclaim(closes, mu, md);
   if (!reclaim) return null;
@@ -990,6 +1010,15 @@ function exportCSV(type) {
   a.download = `screener_${type}_${new Date().toISOString().split('T')[0]}.csv`;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+// ─── MINIMIZE / RESTORE PANELS ───────────────────────────────────────────────
+function togglePanel(id) {
+  const wrap   = document.getElementById(id + 'Wrap');
+  const btn    = document.getElementById(id + 'MinBtn');
+  const hidden = wrap.classList.toggle('minimized');
+  btn.textContent = hidden ? '+' : '−';
+  btn.title       = hidden ? 'Restore' : 'Minimize';
 }
 </script>
 </body>

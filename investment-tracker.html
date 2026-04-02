@@ -181,7 +181,7 @@
       <span>📅 Runs daily: <strong>8:00 AM ET</strong> (pre-market) &amp; <strong>1:00 PM ET</strong> (mid-session) · Weekdays only</span>
       <span id="lastRunInfo">Last run: <strong>never</strong></span>
       <span id="nextRunInfo">Next: <strong>calculating…</strong></span>
-      <span>🎯 ATH threshold: <strong>&gt;80%</strong> &nbsp;|&nbsp; Swing threshold: <strong>&gt;50%</strong></span>
+      <span>🎯 ATH threshold: <strong>&gt;70%</strong> &nbsp;|&nbsp; Swing threshold: <strong>&gt;50%</strong> &nbsp;|&nbsp; Partial exit: <strong>50% @ +3%</strong> · Final: <strong>+5%</strong> · Trail stop: <strong>−2% from peak</strong></span>
     </div>
     <div id="screenerProgressWrap" class="progress-wrap" style="display:none">
       <div class="progress-bar"><div class="progress-fill" id="screenerFill" style="width:0%"></div></div>
@@ -208,8 +208,8 @@
             <th>Invested</th>
             <th>Unrealized P&L</th>
             <th>P&L %</th>
-            <th>Target (+5%)</th>
-            <th>Stop (−2%)</th>
+            <th>Targets (3% / 5%)</th>
+            <th>Trailing Stop</th>
             <th>Action</th>
           </tr>
         </thead>
@@ -278,11 +278,27 @@
       📝 Learning Notes
       <small style="color:#8b949e;font-weight:400;font-size:12px">Document failures → fix code → mark Done to remove</small>
     </div>
-    <div class="notes-desc">When a stop loss hits, note the reason here. Once you've implemented the fix in the screener code, click "✓ Done" to remove it.</div>
+    <div class="notes-desc">Tag each note with a ticker + signal type so patterns emerge over time. Record when the stop triggered to correlate with market conditions. Click "✓ Done" once the fix is in the screener code.</div>
     <div id="notesList"></div>
     <div class="add-note">
-      <textarea id="noteInput" placeholder="e.g. AAPL stop loss hit — stock broke below EMA during earnings week. Add earnings exclusion filter to screener."></textarea>
-      <button class="btn btn-green" onclick="addNote()">+ Add Note</button>
+      <div style="flex:1">
+        <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;align-items:center">
+          <input id="noteTicker" placeholder="Ticker (e.g. AAPL)" style="background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;padding:7px 10px;font-size:13px;font-family:inherit;width:140px;">
+          <select id="noteSignalType" style="background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;padding:7px 10px;font-size:13px;font-family:inherit;">
+            <option value="ATH">ATH Signal</option>
+            <option value="Swing">Swing Signal</option>
+            <option value="General">General</option>
+          </select>
+          <div style="display:flex;align-items:center;gap:6px">
+            <label style="font-size:12px;color:#8b949e;white-space:nowrap">Stop triggered:</label>
+            <input id="noteStopTs" type="date" style="background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;padding:6px 8px;font-size:13px;font-family:inherit;">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <textarea id="noteInput" placeholder="Describe why the stop was hit and what screener change would prevent it next time…" style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;padding:8px 10px;font-size:13px;font-family:inherit;resize:vertical;min-height:60px;"></textarea>
+          <button class="btn btn-green" onclick="addNote()" style="align-self:flex-start">+ Add Note</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -313,12 +329,13 @@ const SWING_NEAR_MAX      = 0.05;
 const S2_ATH_MAX_DRAWDOWN = 0.15;
 
 // Investment thresholds
-const ATH_PROB_THRESHOLD   = 80;
-const SWING_PROB_THRESHOLD = 50;
+const ATH_PROB_THRESHOLD   = 70;    // ATH signal min prob
+const SWING_PROB_THRESHOLD = 50;    // Swing signal min prob
 const TRADE_SIZE           = 100;   // $ per trade
 const TOTAL_CAPITAL        = 2000;  // $ max deployed
-const PROFIT_TARGET        = 0.05;  // 5%
-const STOP_LOSS            = 0.02;  // 2%
+const PARTIAL_TARGET       = 0.03;  // 3% — sell 50% of position
+const PROFIT_TARGET        = 0.05;  // 5% — close remaining 50%
+const STOP_LOSS            = 0.02;  // 2% trailing from highest seen price
 
 // ═══════════════════════════════════════════════════════
 // UNIVERSE (must match index.html)
@@ -590,15 +607,45 @@ function runScreenOnOHLCV(ticker, ohlcv) {
 // ═══════════════════════════════════════════════════════
 // STATE MANAGEMENT
 // ═══════════════════════════════════════════════════════
-const STORAGE_KEY = 'ema_tracker_v1';
+const STORAGE_KEY = 'ema_tracker_v2';
 
 function defaultState() {
   return { trades: [], screenerRuns: [], notes: [], totalCapital: TOTAL_CAPITAL };
 }
 
+// Migrate from v1 (adds trailing stop + partial exit fields to trades, ticker/signalType to notes)
+function migrateV1() {
+  try {
+    const raw = localStorage.getItem('ema_tracker_v1');
+    if (!raw) return null;
+    const v1 = JSON.parse(raw);
+    if (!v1) return null;
+    v1.trades = (v1.trades || []).map(t => ({
+      ...t,
+      sharesTotal:      t.shares,
+      sharesOpen:       t.shares,
+      partialExitDone:  false,
+      partialExitPrice: null, partialExitDate: null, partialExitTime: null, partialExitPnl: null,
+      partialTarget:    +(t.buyPrice * (1 + PARTIAL_TARGET)).toFixed(4),
+      finalTarget:      +(t.buyPrice * (1 + PROFIT_TARGET)).toFixed(4),
+      highestPrice:     t.currentPrice || t.buyPrice,
+      trailingStop:     +((t.currentPrice || t.buyPrice) * (1 - STOP_LOSS)).toFixed(4),
+    }));
+    v1.notes = (v1.notes || []).map(n => {
+      const text = typeof n === 'object' ? n.text : String(n);
+      const ts   = typeof n === 'object' ? (n.ts || '') : '';
+      return { ticker: 'General', signalType: 'General', text, ts, stopTriggerTs: ts };
+    });
+    return v1;
+  } catch { return null; }
+}
+
 let STATE = (() => {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || defaultState(); }
-  catch { return defaultState(); }
+  try {
+    const v2 = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    if (v2) return v2;
+    return migrateV1() || defaultState();
+  } catch { return defaultState(); }
 })();
 
 function saveState() {
@@ -634,13 +681,26 @@ function isMarketOpen() {
 // CAPITAL & PORTFOLIO
 // ═══════════════════════════════════════════════════════
 function deployedCapital() {
-  return STATE.trades.filter(t => t.status === 'live').reduce((s, t) => s + t.invested, 0);
+  // Partial exits free up half the capital
+  return STATE.trades
+    .filter(t => t.status === 'live' || t.status === 'partial')
+    .reduce((s, t) => s + (t.partialExitDone ? t.invested / 2 : t.invested), 0);
 }
 function availableCapital() {
   return STATE.totalCapital - deployedCapital();
 }
 function realizedPnL() {
-  return STATE.trades.filter(t => t.pnl != null).reduce((s, t) => s + t.pnl, 0);
+  let total = 0;
+  for (const t of STATE.trades) {
+    if (t.status !== 'live' && t.status !== 'partial') {
+      // Fully closed: pnl already includes any partial
+      total += t.pnl || 0;
+    } else if (t.partialExitDone && t.partialExitPnl != null) {
+      // Still open but partial sold — count partial as realized
+      total += t.partialExitPnl;
+    }
+  }
+  return total;
 }
 
 // ═══════════════════════════════════════════════════════
@@ -667,11 +727,21 @@ function createTrade(ticker, type, prob, price, runTime) {
     buyDate: todayET(),
     buyTime: timeET(),
     buyPrice: +price.toFixed(4),
-    shares: +shares.toFixed(6),
+    sharesTotal:  +shares.toFixed(6),
+    sharesOpen:   +shares.toFixed(6),
     invested: TRADE_SIZE,
-    targetPrice: +(price * (1 + PROFIT_TARGET)).toFixed(4),
-    stopPrice:   +(price * (1 - STOP_LOSS)).toFixed(4),
-    currentPrice: +price.toFixed(4),
+    // Partial exit at +3%
+    partialExitDone:  false,
+    partialExitPrice: null,
+    partialExitDate:  null,
+    partialExitTime:  null,
+    partialExitPnl:   null,
+    partialTarget: +(price * (1 + PARTIAL_TARGET)).toFixed(4),
+    finalTarget:   +(price * (1 + PROFIT_TARGET)).toFixed(4),
+    // Trailing stop — tracks highest seen price
+    highestPrice:  +price.toFixed(4),
+    trailingStop:  +(price * (1 - STOP_LOSS)).toFixed(4),
+    currentPrice:  +price.toFixed(4),
     pnl: null,
     pnlPct: null,
     sellDate: null,
@@ -688,10 +758,13 @@ function closeTrade(trade, price, reason) {
   trade.sellDate    = todayET();
   trade.sellTime    = timeET();
   trade.sellPrice   = +price.toFixed(4);
-  trade.pnl         = +((price - trade.buyPrice) * trade.shares).toFixed(2);
-  trade.pnlPct      = +((price - trade.buyPrice) / trade.buyPrice * 100).toFixed(2);
   trade.exitReason  = reason;
   trade.currentPrice = +price.toFixed(4);
+  // P&L on remaining open shares + any already-realized partial
+  const remainderPnl  = (price - trade.buyPrice) * (trade.sharesOpen || trade.sharesTotal);
+  const partialPnl    = trade.partialExitPnl || 0;
+  trade.pnl           = +(partialPnl + remainderPnl).toFixed(2);
+  trade.pnlPct        = +(trade.pnl / trade.invested * 100).toFixed(2);
 }
 
 function manualClose(tradeId) {
@@ -711,7 +784,7 @@ let monitorBusy = false;
 
 async function monitorPositions() {
   if (monitorBusy || !isMarketOpen()) return;
-  const live = STATE.trades.filter(t => t.status === 'live');
+  const live = STATE.trades.filter(t => t.status === 'live' || t.status === 'partial');
   if (live.length === 0) return;
   monitorBusy = true;
   let changed = false;
@@ -721,14 +794,41 @@ async function monitorPositions() {
         const price = await fetchLatestPrice(trade.ticker);
         if (price == null) continue;
         trade.currentPrice = price;
-        const chg = (price - trade.buyPrice) / trade.buyPrice * 100;
-        if (chg >= PROFIT_TARGET * 100) {
-          closeTrade(trade, price, 'profit');
-          notify(`✅ Profit booked: ${trade.ticker} +${chg.toFixed(2)}% ($${trade.pnl >= 0 ? '+' : ''}${trade.pnl.toFixed(2)})`);
+
+        // ── Update trailing stop ─────────────────────────────
+        if (price > (trade.highestPrice || trade.buyPrice)) {
+          trade.highestPrice = price;
+          trade.trailingStop = +(price * (1 - STOP_LOSS)).toFixed(4);
+        }
+
+        const chgFromBuy = (price - trade.buyPrice) / trade.buyPrice * 100;
+
+        // ── Partial exit at +3% (sell 50%) ───────────────────
+        if (!trade.partialExitDone && chgFromBuy >= PARTIAL_TARGET * 100) {
+          const halfShares = trade.sharesTotal / 2;
+          trade.partialExitDone  = true;
+          trade.partialExitPrice = +price.toFixed(4);
+          trade.partialExitDate  = todayET();
+          trade.partialExitTime  = timeET();
+          trade.partialExitPnl   = +((price - trade.buyPrice) * halfShares).toFixed(2);
+          trade.sharesOpen       = halfShares;
+          trade.status           = 'partial';
+          notify(`⚡ Partial exit: ${trade.ticker} +${chgFromBuy.toFixed(2)}% — sold 50% at $${price.toFixed(2)} (+$${trade.partialExitPnl.toFixed(2)})`);
           changed = true;
-        } else if (chg <= -(STOP_LOSS * 100)) {
+        }
+
+        // ── Trailing stop hit ────────────────────────────────
+        if (price <= trade.trailingStop) {
+          const wasPartial = trade.partialExitDone;
           closeTrade(trade, price, 'loss');
-          notify(`🛑 Stop loss: ${trade.ticker} ${chg.toFixed(2)}% ($${trade.pnl.toFixed(2)})`);
+          const totalPnl = trade.pnl >= 0 ? '+$' + trade.pnl.toFixed(2) : '-$' + Math.abs(trade.pnl).toFixed(2);
+          notify(`🛑 Trailing stop: ${trade.ticker} at $${price.toFixed(2)} (stop $${trade.trailingStop.toFixed(2)}) ${wasPartial ? '· partial exit locked in gains' : ''} · Total P&L ${totalPnl}`);
+          changed = true;
+        }
+        // ── Final profit target at +5% ───────────────────────
+        else if (chgFromBuy >= PROFIT_TARGET * 100) {
+          closeTrade(trade, price, 'profit');
+          notify(`✅ Profit booked: ${trade.ticker} +${chgFromBuy.toFixed(2)}% · Total P&L ${trade.pnl >= 0 ? '+$' : '-$'}${Math.abs(trade.pnl).toFixed(2)}`);
           changed = true;
         } else {
           changed = true; // price updated
@@ -831,11 +931,14 @@ async function runScreener(scheduledTime) {
 // NOTES
 // ═══════════════════════════════════════════════════════
 function addNote() {
-  const el = document.getElementById('noteInput');
-  const text = el.value.trim();
+  const text       = document.getElementById('noteInput').value.trim();
+  const ticker     = (document.getElementById('noteTicker').value.trim().toUpperCase() || 'General');
+  const signalType = document.getElementById('noteSignalType').value;
+  const stopTs     = document.getElementById('noteStopTs').value || todayET();
   if (!text) return;
-  STATE.notes.push({ text, ts: todayET() });
-  el.value = '';
+  STATE.notes.push({ ticker, signalType, text, ts: todayET(), stopTriggerTs: stopTs });
+  document.getElementById('noteInput').value  = '';
+  document.getElementById('noteTicker').value = '';
   saveState();
   renderNotes();
 }
@@ -898,26 +1001,35 @@ function flag(exch) { return exch === 'TSX' ? '🇨🇦' : '🇺🇸'; }
 
 function renderLive() {
   const tbody = document.getElementById('liveBody');
-  const live  = STATE.trades.filter(t => t.status === 'live').sort((a,b) => b.prob - a.prob);
+  const live  = STATE.trades.filter(t => t.status === 'live' || t.status === 'partial').sort((a,b) => b.prob - a.prob);
   document.getElementById('liveBadge').textContent = live.length;
   if (!live.length) { tbody.innerHTML = '<tr><td colspan="12" class="empty">No live positions</td></tr>'; return; }
   tbody.innerHTML = live.map(t => {
-    const cp  = t.currentPrice || t.buyPrice;
-    const chg = (cp - t.buyPrice) / t.buyPrice * 100;
-    const pnl = (cp - t.buyPrice) * t.shares;
-    const cls = chg >= 0 ? 'positive' : 'negative';
+    const cp       = t.currentPrice || t.buyPrice;
+    const sharesOpen = t.sharesOpen || t.sharesTotal || 0;
+    const openPnl  = (cp - t.buyPrice) * sharesOpen;
+    const totalUnreal = openPnl + (t.partialExitPnl || 0);
+    const chg      = (cp - t.buyPrice) / t.buyPrice * 100;
+    const cls      = totalUnreal >= 0 ? 'positive' : 'negative';
+    const trailStop = t.trailingStop || +(t.buyPrice * (1 - STOP_LOSS)).toFixed(2);
+    const partialTag = t.partialExitDone
+      ? `<div style="font-size:10px;color:#e3b341;margin-top:2px">⚡ 50% sold @ $${(t.partialExitPrice||0).toFixed(2)} (+$${(t.partialExitPnl||0).toFixed(2)})</div>`
+      : '';
+    const targets = t.partialExitDone
+      ? `<span style="color:#3fb950">Full exit $${t.finalTarget.toFixed(2)}</span>`
+      : `<span style="color:#e3b341">50%→$${t.partialTarget.toFixed(2)}</span> <span style="color:#8b949e">/</span> <span style="color:#3fb950">$${t.finalTarget.toFixed(2)}</span>`;
     return `<tr>
-      <td><div class="ticker-cell">${flag(t.exchange)} ${t.ticker}</div><div class="ticker-name">${escHtml(COMPANY_NAMES[t.ticker]||'')}</div></td>
+      <td><div class="ticker-cell">${flag(t.exchange)} ${t.ticker}</div><div class="ticker-name">${escHtml(COMPANY_NAMES[t.ticker]||'')}</div>${partialTag}</td>
       <td>${typeBadge(t.type)}</td>
       <td>${pBadge(t.prob)}</td>
       <td>${t.buyDate}<br><small style="color:#8b949e">${t.buyTime} ET</small></td>
       <td>$${t.buyPrice.toFixed(2)}</td>
-      <td>$${cp.toFixed(2)}</td>
+      <td>$${cp.toFixed(2)}<br><small style="color:#8b949e">${chg>=0?'+':''}${chg.toFixed(2)}%</small></td>
       <td>$${t.invested}</td>
-      <td class="${cls}">${pnl>=0?'+':''}\$${pnl.toFixed(2)}</td>
+      <td class="${cls}">${totalUnreal>=0?'+':''}\$${totalUnreal.toFixed(2)}</td>
       <td class="${cls}">${chg>=0?'+':''}${chg.toFixed(2)}%</td>
-      <td class="target">$${t.targetPrice.toFixed(2)}</td>
-      <td class="stop">$${t.stopPrice.toFixed(2)}</td>
+      <td style="font-size:12px">${targets}</td>
+      <td class="stop">$${trailStop.toFixed(2)}<br><small style="color:#8b949e">trail −${(STOP_LOSS*100).toFixed(0)}%</small></td>
       <td><button class="btn-close" onclick="manualClose('${t.id}')">Close</button></td>
     </tr>`;
   }).join('');
@@ -932,9 +1044,12 @@ function renderClosed() {
   tbody.innerHTML = closed.map(t => {
     const cls = (t.pnl||0) >= 0 ? 'positive' : 'negative';
     let reasonBadge = '';
-    if (t.exitReason === 'profit')  reasonBadge = '<span class="badge-profit">✓ Profit Booked</span>';
-    else if (t.exitReason === 'loss') reasonBadge = '<span class="badge-loss">✗ Stop Loss Hit</span>';
+    if (t.exitReason === 'profit')  reasonBadge = '<span class="badge-profit">✓ Profit (+5%)</span>';
+    else if (t.exitReason === 'loss') reasonBadge = '<span class="badge-loss">✗ Trailing Stop</span>';
     else reasonBadge = '<span class="badge-manual">Manual Close</span>';
+    const partialNote = t.partialExitDone
+      ? `<br><small style="color:#e3b341">⚡ 50% @ $${(t.partialExitPrice||0).toFixed(2)} on ${t.partialExitDate||'—'} (+$${(t.partialExitPnl||0).toFixed(2)})</small>`
+      : '';
     return `<tr>
       <td><div class="ticker-cell">${flag(t.exchange)} ${t.ticker}</div><div class="ticker-name">${escHtml(COMPANY_NAMES[t.ticker]||'')}</div></td>
       <td>${typeBadge(t.type)}</td>
@@ -942,7 +1057,7 @@ function renderClosed() {
       <td>${t.buyDate}</td>
       <td>${t.sellDate||'—'}</td>
       <td>$${t.buyPrice.toFixed(2)}</td>
-      <td>$${(t.sellPrice||0).toFixed(2)}</td>
+      <td>$${(t.sellPrice||0).toFixed(2)}${partialNote}</td>
       <td>$${t.invested}</td>
       <td class="${cls}">${(t.pnl||0)>=0?'+':''}\$${(t.pnl||0).toFixed(2)}</td>
       <td class="${cls}">${(t.pnlPct||0)>=0?'+':''}${(t.pnlPct||0).toFixed(2)}%</td>
@@ -969,15 +1084,36 @@ function renderRunLog() {
 function renderNotes() {
   const el = document.getElementById('notesList');
   if (!STATE.notes.length) {
-    el.innerHTML = '<p class="empty-notes">No notes yet. Use this section to document why a stop loss was hit and what code change would prevent it.</p>';
+    el.innerHTML = '<p class="empty-notes">No notes yet. Tag each note with a ticker + signal type to track patterns. Click "✓ Done" once the fix is implemented in the screener code.</p>';
     return;
   }
   el.innerHTML = STATE.notes.map((n, i) => {
-    const text = typeof n === 'object' ? n.text : n;
-    const ts   = typeof n === 'object' ? ` <small style="color:#484f58">(${n.ts})</small>` : '';
+    const text       = typeof n === 'object' ? n.text : String(n);
+    const ticker     = n.ticker     || 'General';
+    const signalType = n.signalType || 'General';
+    const ts         = n.ts         || '';
+    const stopTs     = n.stopTriggerTs || '';
+    const tickerBadge = ticker !== 'General'
+      ? `<span style="background:#1a2a3a;color:#58a6ff;border:1px solid #1f6feb;padding:1px 7px;border-radius:4px;font-size:11px;font-weight:700">${escHtml(ticker)}</span>`
+      : '';
+    const sigBadge = signalType === 'ATH'
+      ? `<span class="badge-ath">${signalType}</span>`
+      : signalType === 'Swing'
+        ? `<span class="badge-swing">${signalType}</span>`
+        : `<span class="badge" style="font-size:11px">General</span>`;
+    const meta = [
+      stopTs ? `🛑 Stop triggered: <strong>${stopTs}</strong>` : '',
+      ts     ? `Added: ${ts}` : ''
+    ].filter(Boolean).join(' · ');
     return `<div class="note-item">
       <span class="note-num">${i+1}.</span>
-      <span class="note-text">${escHtml(text)}${ts}</span>
+      <div style="flex:1">
+        <div style="display:flex;gap:6px;align-items:center;margin-bottom:5px;flex-wrap:wrap">
+          ${tickerBadge}${sigBadge}
+          <small style="color:#484f58;font-size:11px">${meta}</small>
+        </div>
+        <span class="note-text">${escHtml(text)}</span>
+      </div>
       <button class="note-del" onclick="deleteNote(${i})">✓ Done</button>
     </div>`;
   }).join('');

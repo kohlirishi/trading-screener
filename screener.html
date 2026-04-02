@@ -1,0 +1,996 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>S&P 500 EMA Reclaim Screener</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0d1117;
+    color: #c9d1d9;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;
+    font-size: 14px;
+    min-height: 100vh;
+  }
+
+  /* NAV */
+  .nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: #161b22;
+    border-bottom: 1px solid #30363d;
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .nav-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: #f0f6fc;
+    flex: 1;
+    min-width: 180px;
+  }
+  .nav-title span { color: #238636; }
+
+  #runBtn {
+    background: #238636;
+    color: #fff;
+    border: none;
+    padding: 10px 28px;
+    border-radius: 6px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+    white-space: nowrap;
+  }
+  #runBtn:hover { background: #2ea043; }
+  #runBtn:disabled { background: #3d4f3e; color: #8b949e; cursor: not-allowed; }
+
+  #stopBtn {
+    background: #da3633;
+    color: #fff;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    display: none;
+    white-space: nowrap;
+  }
+  #stopBtn:hover { background: #f85149; }
+
+  /* STATS BAR */
+  .stats-bar {
+    background: #161b22;
+    border-bottom: 1px solid #30363d;
+    padding: 8px 20px;
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    flex-wrap: wrap;
+    font-size: 13px;
+    color: #8b949e;
+  }
+  .stats-bar .stat { display: flex; align-items: center; gap: 6px; }
+  .stats-bar .stat strong { color: #c9d1d9; }
+  #errorCount { color: #f85149; }
+
+  /* PROGRESS */
+  .progress-wrap {
+    padding: 10px 20px;
+    background: #0d1117;
+    display: none;
+  }
+  .progress-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 6px;
+    font-size: 12px;
+    color: #8b949e;
+  }
+  #currentTicker { color: #58a6ff; font-weight: 600; min-width: 60px; }
+  .progress-bar-bg {
+    flex: 1;
+    height: 6px;
+    background: #21262d;
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #238636, #2ea043);
+    border-radius: 3px;
+    transition: width 0.3s ease;
+    width: 0%;
+  }
+  #progressPct { min-width: 40px; text-align: right; }
+
+  /* MAIN CONTENT */
+  .main { padding: 20px; max-width: 1400px; margin: 0 auto; }
+
+  /* TABLE SECTION */
+  .table-section { margin-bottom: 40px; }
+  .table-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .table-title {
+    font-size: 17px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .table-title.ath { color: #d4a017; }
+  .table-title.swing { color: #58a6ff; }
+  .table-title .badge {
+    background: #21262d;
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    padding: 2px 10px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .table-title.ath .badge { color: #d4a017; border-color: #d4a017; }
+  .table-title.swing .badge { color: #58a6ff; border-color: #58a6ff; }
+
+  .export-btn {
+    background: #21262d;
+    color: #8b949e;
+    border: 1px solid #30363d;
+    padding: 6px 14px;
+    border-radius: 5px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .export-btn:hover { background: #30363d; color: #c9d1d9; }
+
+  .table-wrap {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    overflow: hidden;
+    overflow-x: auto;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 600px;
+  }
+  thead th {
+    background: #21262d;
+    padding: 12px 16px;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #8b949e;
+    border-bottom: 1px solid #30363d;
+    white-space: nowrap;
+  }
+  thead th:last-child { text-align: center; }
+
+  tbody tr {
+    border-bottom: 1px solid #21262d;
+    transition: background 0.15s;
+    animation: fadeIn 0.3s ease;
+  }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: #1c2128; }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  td { padding: 12px 16px; vertical-align: top; }
+  td:last-child { text-align: center; vertical-align: middle; }
+
+  .stock-ticker {
+    font-weight: 700;
+    font-size: 15px;
+    color: #f0f6fc;
+    letter-spacing: 0.03em;
+  }
+  .stock-name {
+    color: #8b949e;
+    font-size: 12px;
+    margin-top: 2px;
+  }
+  .stock-price {
+    color: #3fb950;
+    font-weight: 600;
+    font-size: 13px;
+    margin-top: 4px;
+  }
+
+  .metrics { list-style: none; }
+  .metrics li {
+    font-size: 12px;
+    color: #8b949e;
+    padding: 1px 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .metrics li::before {
+    content: '•';
+    color: #30363d;
+    font-size: 14px;
+  }
+  .metrics .val { color: #c9d1d9; font-weight: 500; }
+  .metrics .good { color: #3fb950; }
+  .metrics .warn { color: #d4a017; }
+
+  /* PROBABILITY BADGE */
+  .prob-badge {
+    display: inline-block;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 16px;
+    font-weight: 700;
+    min-width: 68px;
+    text-align: center;
+  }
+  .prob-green { background: #0d4a20; color: #3fb950; border: 1px solid #238636; }
+  .prob-yellow { background: #3d2f00; color: #d4a017; border: 1px solid #9e6a03; }
+  .prob-orange { background: #3d1a00; color: #f0883e; border: 1px solid #bd561d; }
+
+  /* EMPTY STATE */
+  .empty-state {
+    padding: 40px 20px;
+    text-align: center;
+    color: #484f58;
+  }
+  .empty-state svg { margin-bottom: 12px; opacity: 0.4; }
+  .empty-state p { font-size: 14px; }
+
+  /* FOOTER */
+  .footer {
+    text-align: center;
+    padding: 24px 20px;
+    color: #484f58;
+    font-size: 12px;
+    border-top: 1px solid #21262d;
+    margin-top: 20px;
+  }
+  .footer a { color: #58a6ff; text-decoration: none; }
+  .footer a:hover { text-decoration: underline; }
+
+  /* MOBILE */
+  @media (max-width: 600px) {
+    .nav { padding: 10px 14px; }
+    .nav-title { font-size: 15px; }
+    .main { padding: 12px; }
+    td { padding: 10px 12px; }
+    .prob-badge { font-size: 14px; padding: 5px 10px; min-width: 56px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav">
+  <div class="nav-title">S&amp;P 500 <span>EMA Reclaim</span> Screener</div>
+  <button id="runBtn" onclick="startScreen()">&#9654; Run Screener</button>
+  <button id="stopBtn" onclick="stopScreen()">&#9632; Stop</button>
+</nav>
+
+<!-- STATS BAR -->
+<div class="stats-bar">
+  <div class="stat">Screened: <strong id="screenedCount">0</strong> / <strong id="totalCount">475</strong></div>
+  <div class="stat">Table 1 (ATH): <strong id="t1Count">0</strong></div>
+  <div class="stat">Table 2 (Swing): <strong id="t2Count">0</strong></div>
+  <div class="stat">Errors: <strong id="errorCount">0</strong></div>
+  <div class="stat">Elapsed: <strong id="elapsedTime">0s</strong></div>
+</div>
+
+<!-- PROGRESS -->
+<div class="progress-wrap" id="progressWrap">
+  <div class="progress-row">
+    <span>Processing: <span id="currentTicker">—</span></span>
+    <div class="progress-bar-bg"><div class="progress-bar-fill" id="progressFill"></div></div>
+    <span id="progressPct">0%</span>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- TABLE 1 -->
+  <div class="table-section">
+    <div class="table-header">
+      <div class="table-title ath">
+        &#9733; Near ATH — EMA Reclaim
+        <span class="badge" id="t1Badge">0</span>
+      </div>
+      <button class="export-btn" onclick="exportCSV('ath')">&#8595; Export CSV</button>
+    </div>
+    <div class="table-wrap">
+      <table id="t1Table">
+        <thead>
+          <tr>
+            <th>Stock</th>
+            <th>Why It Qualifies</th>
+            <th>Breakout Probability</th>
+          </tr>
+        </thead>
+        <tbody id="t1Body">
+          <tr><td colspan="3"><div class="empty-state"><p>Run the screener to see results</p></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- TABLE 2 -->
+  <div class="table-section">
+    <div class="table-header">
+      <div class="table-title swing">
+        &#9650; Swing High — EMA Reclaim
+        <span class="badge" id="t2Badge">0</span>
+      </div>
+      <button class="export-btn" onclick="exportCSV('swing')">&#8595; Export CSV</button>
+    </div>
+    <div class="table-wrap">
+      <table id="t2Table">
+        <thead>
+          <tr>
+            <th>Stock</th>
+            <th>Why It Qualifies</th>
+            <th>Breakout Probability</th>
+          </tr>
+        </thead>
+        <tbody id="t2Body">
+          <tr><td colspan="3"><div class="empty-state"><p>Run the screener to see results</p></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<!-- FOOTER -->
+<div class="footer">
+  Data sourced from <a href="https://finance.yahoo.com" target="_blank">Yahoo Finance</a> via
+  <a href="https://corsproxy.io" target="_blank">corsproxy.io</a>.
+  For personal use only. Not financial advice.
+</div>
+
+<script>
+// ─── CONSTANTS ───────────────────────────────────────────────────────────────
+const EMA_PERIOD          = 220;
+const MA_BUFFER           = 0.003;
+const ATH_THRESHOLD       = 0.05;
+const MAX_RECLAIM_BARS    = 60;
+const MAX_BELOW_BARS      = 10;
+const UPTREND_LOOKBACK    = 60;
+const SWING_HIGH_MIN_BARS = 126;
+const SWING_HIGH_MAX_BARS = 378;
+const SWING_NEAR_MIN      = 0.01;
+const SWING_NEAR_MAX      = 0.05;
+const S2_ATH_MAX_DRAWDOWN = 0.15;
+
+// ─── UNIVERSE ─────────────────────────────────────────────────────────────────
+const TICKERS = ["A","AAL","AAP","AAPL","ABBV","ABT","ACN","ADBE","ADI","ADM","ADP","ADSK","AEE","AEP","AES","AFL","AIG","AIZ","AJG","AKAM","ALB","ALGN","ALL","ALLE","AMAT","AMCR","AMD","AME","AMGN","AMP","AMT","AMZN","ANET","AON","AOS","APA","APD","APH","APTV","ARE","ATO","AVB","AVGO","AVY","AWK","AXON","AXP","AZO","BA","BAC","BALL","BAX","BBWI","BBY","BDX","BEN","BF-B","BG","BIIB","BK","BKNG","BKR","BLDR","BLK","BMY","BR","BRK-B","BRO","BSX","BWA","BX","BXP","C","CAG","CAH","CARR","CAT","CB","CBOE","CBRE","CCI","CCL","CDNS","CDW","CE","CEG","CF","CFG","CHD","CHRW","CHTR","CI","CINF","CL","CLX","CMA","CMCSA","CME","CMG","CMI","CMS","CNC","CNP","COF","COO","COP","COST","CPB","CPRT","CPT","CRL","CRM","CRWD","CSCO","CSGP","CSX","CTAS","CTRA","CTSH","CTVA","CVS","CVX","CZR","D","DAL","DAY","DD","DE","DECK","DG","DGX","DHI","DHR","DIS","DLR","DLTR","DOC","DOV","DOW","DPZ","DRI","DTE","DUK","DVA","DVN","DXCM","EA","EBAY","ECL","ED","EFX","EG","EIX","EL","ELV","EMN","EMR","ENPH","EOG","EPAM","EQIX","EQR","EQT","ES","ESS","ETN","ETR","ETSY","EVRG","EW","EXC","EXPD","EXPE","EXR","F","FANG","FAST","FCX","FDS","FDX","FE","FFIV","FICO","FIS","FITB","FMC","FOX","FOXA","FRT","FSLR","FTNT","FTV","GD","GDDY","GE","GEHC","GEN","GILD","GIS","GL","GLW","GM","GNRC","GOOGL","GOOG","GPC","GPN","GS","GWW","HAL","HAS","HBAN","HCA","HD","HIG","HII","HLT","HOLX","HON","HPE","HPQ","HRL","HSIC","HST","HSY","HUBB","HUM","HWM","IBM","ICE","IDXX","IEX","IFF","ILMN","INCY","INTC","INTU","INVH","IP","IQV","IR","IRM","ISRG","IT","ITW","IVZ","J","JBHT","JCI","JKHY","JNJ","JPM","KEY","KEYS","KHC","KIM","KLAC","KMB","KMI","KMX","KO","KR","L","LDOS","LEN","LH","LHX","LIN","LKQ","LLY","LMT","LNT","LOW","LRCX","LULU","LUV","LVS","LW","LYB","LYV","MA","MAA","MAR","MAS","MCD","MCHP","MCK","MCO","MDLZ","MDT","MET","META","MGM","MHK","MKC","MKTX","MLM","MNST","MO","MOH","MOS","MPC","MPWR","MRK","MRNA","MS","MSCI","MSFT","MSI","MTB","MTD","MU","NCLH","NDAQ","NEE","NEM","NFLX","NI","NKE","NOC","NOW","NRG","NSC","NTAP","NTRS","NUE","NVDA","NVR","NWS","NWSA","NXPI","O","ODFL","OKE","OMC","ON","ORCL","ORLY","OXY","PAYC","PAYX","PCAR","PCG","PEG","PEP","PFE","PFG","PG","PGR","PH","PHM","PKG","PLD","PM","PNC","PNR","PNW","PODD","POOL","PPG","PPL","PRU","PSA","PSX","PTC","PWR","PYPL","QCOM","QRVO","RCL","REG","REGN","RF","RJF","RL","RMD","ROK","ROL","ROP","ROST","RSG","RTX","RVTY","SBAC","SBUX","SCHW","SJM","SLB","SMCI","SNA","SNPS","SO","SPG","SPGI","SRE","STE","STLD","STT","STX","STZ","SWK","SWKS","SYF","SYK","SYY","T","TAP","TDG","TDY","TECH","TEL","TER","TFC","TFX","TGT","TJX","TMO","TMUS","TPR","TRGP","TRMB","TROW","TRV","TSCO","TSLA","TSN","TT","TTWO","TXN","TXT","TYL","UAL","UDR","UHS","ULTA","UNH","UNP","UPS","URI","USB","V","VFC","VICI","VLO","VLTO","VMC","VRSK","VRSN","VRTX","VTR","VTRS","VZ","WAB","WAT","WDAY","WBD","WDC","WELL","WFC","WHR","WM","WMB","WMT","WRB","WST","WTW","WY","WYNN","XEL","XOM","XYL","YUM","ZBH","ZBRA","ZTS"];
+
+// ─── COMPANY NAMES ────────────────────────────────────────────────────────────
+const COMPANY_NAMES = {
+  "A":"Agilent Technologies","AAL":"American Airlines","AAP":"Advance Auto Parts","AAPL":"Apple Inc.",
+  "ABBV":"AbbVie Inc.","ABT":"Abbott Laboratories","ACN":"Accenture plc","ADBE":"Adobe Inc.",
+  "ADI":"Analog Devices","ADM":"Archer-Daniels-Midland","ADP":"Automatic Data Processing","ADSK":"Autodesk Inc.",
+  "AEE":"Ameren Corp","AEP":"American Electric Power","AES":"AES Corp","AFL":"Aflac Inc.",
+  "AIG":"American International Group","AIZ":"Assurant Inc.","AJG":"Arthur J. Gallagher","AKAM":"Akamai Technologies",
+  "ALB":"Albemarle Corp","ALGN":"Align Technology","ALL":"Allstate Corp","ALLE":"Allegion plc",
+  "AMAT":"Applied Materials","AMCR":"Amcor plc","AMD":"Advanced Micro Devices","AME":"AMETEK Inc.",
+  "AMGN":"Amgen Inc.","AMP":"Ameriprise Financial","AMT":"American Tower Corp","AMZN":"Amazon.com Inc.",
+  "ANET":"Arista Networks","AON":"Aon plc","AOS":"A.O. Smith Corp","APA":"APA Corp",
+  "APD":"Air Products & Chemicals","APH":"Amphenol Corp","APTV":"Aptiv plc","ARE":"Alexandria Real Estate",
+  "ATO":"Atmos Energy","AVB":"AvalonBay Communities","AVGO":"Broadcom Inc.","AVY":"Avery Dennison",
+  "AWK":"American Water Works","AXON":"Axon Enterprise","AXP":"American Express","AZO":"AutoZone Inc.",
+  "BA":"Boeing Co.","BAC":"Bank of America","BALL":"Ball Corp","BAX":"Baxter International",
+  "BBWI":"Bath & Body Works","BBY":"Best Buy Co.","BDX":"Becton Dickinson","BEN":"Franklin Resources",
+  "BF-B":"Brown-Forman Corp","BG":"Bunge Global","BIIB":"Biogen Inc.","BK":"Bank of New York Mellon",
+  "BKNG":"Booking Holdings","BKR":"Baker Hughes","BLDR":"Builders FirstSource","BLK":"BlackRock Inc.",
+  "BMY":"Bristol-Myers Squibb","BR":"Broadridge Financial","BRK-B":"Berkshire Hathaway","BRO":"Brown & Brown",
+  "BSX":"Boston Scientific","BWA":"BorgWarner Inc.","BX":"Blackstone Inc.","BXP":"BXP Inc.",
+  "C":"Citigroup Inc.","CAG":"Conagra Brands","CAH":"Cardinal Health","CARR":"Carrier Global",
+  "CAT":"Caterpillar Inc.","CB":"Chubb Ltd.","CBOE":"Cboe Global Markets","CBRE":"CBRE Group",
+  "CCI":"Crown Castle Inc.","CCL":"Carnival Corp","CDNS":"Cadence Design Systems","CDW":"CDW Corp",
+  "CE":"Celanese Corp","CEG":"Constellation Energy","CF":"CF Industries","CFG":"Citizens Financial",
+  "CHD":"Church & Dwight","CHRW":"C.H. Robinson","CHTR":"Charter Communications","CI":"Cigna Group",
+  "CINF":"Cincinnati Financial","CL":"Colgate-Palmolive","CLX":"Clorox Co.","CMA":"Comerica Inc.",
+  "CMCSA":"Comcast Corp","CME":"CME Group","CMG":"Chipotle Mexican Grill","CMI":"Cummins Inc.",
+  "CMS":"CMS Energy","CNC":"Centene Corp","CNP":"CenterPoint Energy","COF":"Capital One Financial",
+  "COO":"Cooper Companies","COP":"ConocoPhillips","COST":"Costco Wholesale","CPB":"Campbell Soup",
+  "CPRT":"Copart Inc.","CPT":"Camden Property Trust","CRL":"Charles River Laboratories","CRM":"Salesforce Inc.",
+  "CRWD":"CrowdStrike Holdings","CSCO":"Cisco Systems","CSGP":"CoStar Group","CSX":"CSX Corp",
+  "CTAS":"Cintas Corp","CTRA":"Coterra Energy","CTSH":"Cognizant Technology","CTVA":"Corteva Inc.",
+  "CVS":"CVS Health","CVX":"Chevron Corp","CZR":"Caesars Entertainment","D":"Dominion Energy",
+  "DAL":"Delta Air Lines","DAY":"Dayforce Inc.","DD":"DuPont de Nemours","DE":"Deere & Company",
+  "DECK":"Deckers Outdoor","DG":"Dollar General","DGX":"Quest Diagnostics","DHI":"D.R. Horton",
+  "DHR":"Danaher Corp","DIS":"Walt Disney Co.","DLR":"Digital Realty Trust","DLTR":"Dollar Tree",
+  "DOC":"Healthpeak Properties","DOV":"Dover Corp","DOW":"Dow Inc.","DPZ":"Domino's Pizza",
+  "DRI":"Darden Restaurants","DTE":"DTE Energy","DUK":"Duke Energy","DVA":"DaVita Inc.",
+  "DVN":"Devon Energy","DXCM":"Dexcom Inc.","EA":"Electronic Arts","EBAY":"eBay Inc.",
+  "ECL":"Ecolab Inc.","ED":"Consolidated Edison","EFX":"Equifax Inc.","EG":"Everest Group",
+  "EIX":"Edison International","EL":"Estee Lauder Companies","ELV":"Elevance Health","EMN":"Eastman Chemical",
+  "EMR":"Emerson Electric","ENPH":"Enphase Energy","EOG":"EOG Resources","EPAM":"EPAM Systems",
+  "EQIX":"Equinix Inc.","EQR":"Equity Residential","EQT":"EQT Corp","ES":"Eversource Energy",
+  "ESS":"Essex Property Trust","ETN":"Eaton Corp","ETR":"Entergy Corp","ETSY":"Etsy Inc.",
+  "EVRG":"Evergy Inc.","EW":"Edwards Lifesciences","EXC":"Exelon Corp","EXPD":"Expeditors Intl",
+  "EXPE":"Expedia Group","EXR":"Extra Space Storage","F":"Ford Motor Co.","FANG":"Diamondback Energy",
+  "FAST":"Fastenal Co.","FCX":"Freeport-McMoRan","FDS":"FactSet Research Systems","FDX":"FedEx Corp",
+  "FE":"FirstEnergy Corp","FFIV":"F5 Inc.","FICO":"Fair Isaac Corp","FIS":"Fidelity National Info",
+  "FITB":"Fifth Third Bancorp","FMC":"FMC Corp","FOX":"Fox Corp","FOXA":"Fox Corp Class A",
+  "FRT":"Federal Realty Investment","FSLR":"First Solar Inc.","FTNT":"Fortinet Inc.","FTV":"Fortive Corp",
+  "GD":"General Dynamics","GDDY":"GoDaddy Inc.","GE":"GE Aerospace","GEHC":"GE HealthCare Technologies",
+  "GEN":"Gen Digital Inc.","GILD":"Gilead Sciences","GIS":"General Mills","GL":"Globe Life Inc.",
+  "GLW":"Corning Inc.","GM":"General Motors","GNRC":"Generac Holdings","GOOGL":"Alphabet Inc. Class A",
+  "GOOG":"Alphabet Inc. Class C","GPC":"Genuine Parts Co.","GPN":"Global Payments","GS":"Goldman Sachs",
+  "GWW":"W.W. Grainger","HAL":"Halliburton Co.","HAS":"Hasbro Inc.","HBAN":"Huntington Bancshares",
+  "HCA":"HCA Healthcare","HD":"Home Depot","HIG":"Hartford Financial","HII":"Huntington Ingalls",
+  "HLT":"Hilton Worldwide","HOLX":"Hologic Inc.","HON":"Honeywell International","HPE":"Hewlett Packard Enterprise",
+  "HPQ":"HP Inc.","HRL":"Hormel Foods","HSIC":"Henry Schein","HST":"Host Hotels & Resorts",
+  "HSY":"Hershey Co.","HUBB":"Hubbell Inc.","HUM":"Humana Inc.","HWM":"Howmet Aerospace",
+  "IBM":"IBM Corp","ICE":"Intercontinental Exchange","IDXX":"IDEXX Laboratories","IEX":"IDEX Corp",
+  "IFF":"International Flavors","ILMN":"Illumina Inc.","INCY":"Incyte Corp","INTC":"Intel Corp",
+  "INTU":"Intuit Inc.","INVH":"Invitation Homes","IP":"International Paper","IQV":"IQVIA Holdings",
+  "IR":"Ingersoll Rand","IRM":"Iron Mountain","ISRG":"Intuitive Surgical","IT":"Gartner Inc.",
+  "ITW":"Illinois Tool Works","IVZ":"Invesco Ltd.","J":"Jacobs Solutions","JBHT":"J.B. Hunt Transport",
+  "JCI":"Johnson Controls","JKHY":"Jack Henry & Associates","JNJ":"Johnson & Johnson","JPM":"JPMorgan Chase",
+  "KEY":"KeyCorp","KEYS":"Keysight Technologies","KHC":"Kraft Heinz Co.","KIM":"Kimco Realty",
+  "KLAC":"KLA Corp","KMB":"Kimberly-Clark","KMI":"Kinder Morgan","KMX":"CarMax Inc.",
+  "KO":"Coca-Cola Co.","KR":"Kroger Co.","L":"Loews Corp","LDOS":"Leidos Holdings",
+  "LEN":"Lennar Corp","LH":"Laboratory Corp","LHX":"L3Harris Technologies","LIN":"Linde plc",
+  "LKQ":"LKQ Corp","LLY":"Eli Lilly and Co.","LMT":"Lockheed Martin","LNT":"Alliant Energy",
+  "LOW":"Lowe's Companies","LRCX":"Lam Research","LULU":"Lululemon Athletica","LUV":"Southwest Airlines",
+  "LVS":"Las Vegas Sands","LW":"Lamb Weston Holdings","LYB":"LyondellBasell Industries","LYV":"Live Nation Entertainment",
+  "MA":"Mastercard Inc.","MAA":"Mid-America Apartment","MAR":"Marriott International","MAS":"Masco Corp",
+  "MCD":"McDonald's Corp","MCHP":"Microchip Technology","MCK":"McKesson Corp","MCO":"Moody's Corp",
+  "MDLZ":"Mondelez International","MDT":"Medtronic plc","MET":"MetLife Inc.","META":"Meta Platforms",
+  "MGM":"MGM Resorts","MHK":"Mohawk Industries","MKC":"McCormick & Company","MKTX":"MarketAxess Holdings",
+  "MLM":"Martin Marietta Materials","MNST":"Monster Beverage","MO":"Altria Group","MOH":"Molina Healthcare",
+  "MOS":"Mosaic Co.","MPC":"Marathon Petroleum","MPWR":"Monolithic Power Systems","MRK":"Merck & Co.",
+  "MRNA":"Moderna Inc.","MS":"Morgan Stanley","MSCI":"MSCI Inc.","MSFT":"Microsoft Corp",
+  "MSI":"Motorola Solutions","MTB":"M&T Bank Corp","MTD":"Mettler-Toledo International","MU":"Micron Technology",
+  "NCLH":"Norwegian Cruise Line","NDAQ":"Nasdaq Inc.","NEE":"NextEra Energy","NEM":"Newmont Corp",
+  "NFLX":"Netflix Inc.","NI":"NiSource Inc.","NKE":"Nike Inc.","NOC":"Northrop Grumman",
+  "NOW":"ServiceNow Inc.","NRG":"NRG Energy","NSC":"Norfolk Southern","NTAP":"NetApp Inc.",
+  "NTRS":"Northern Trust","NUE":"Nucor Corp","NVDA":"Nvidia Corp","NVR":"NVR Inc.",
+  "NWS":"News Corp","NWSA":"News Corp Class A","NXPI":"NXP Semiconductors","O":"Realty Income Corp",
+  "ODFL":"Old Dominion Freight Line","OKE":"ONEOK Inc.","OMC":"Omnicom Group","ON":"ON Semiconductor",
+  "ORCL":"Oracle Corp","ORLY":"O'Reilly Automotive","OXY":"Occidental Petroleum","PAYC":"Paycom Software",
+  "PAYX":"Paychex Inc.","PCAR":"PACCAR Inc.","PCG":"PG&E Corp","PEG":"Public Service Enterprise",
+  "PEP":"PepsiCo Inc.","PFE":"Pfizer Inc.","PFG":"Principal Financial","PG":"Procter & Gamble",
+  "PGR":"Progressive Corp","PH":"Parker-Hannifin","PHM":"PulteGroup Inc.","PKG":"Packaging Corp",
+  "PLD":"Prologis Inc.","PM":"Philip Morris International","PNC":"PNC Financial Services","PNR":"Pentair plc",
+  "PNW":"Pinnacle West Capital","PODD":"Insulet Corp","POOL":"Pool Corp","PPG":"PPG Industries",
+  "PPL":"PPL Corp","PRU":"Prudential Financial","PSA":"Public Storage","PSX":"Phillips 66",
+  "PTC":"PTC Inc.","PWR":"Quanta Services","PYPL":"PayPal Holdings","QCOM":"Qualcomm Inc.",
+  "QRVO":"Qorvo Inc.","RCL":"Royal Caribbean Cruises","REG":"Regency Centers","REGN":"Regeneron Pharmaceuticals",
+  "RF":"Regions Financial","RJF":"Raymond James Financial","RL":"Ralph Lauren Corp","RMD":"ResMed Inc.",
+  "ROK":"Rockwell Automation","ROL":"Rollins Inc.","ROP":"Roper Technologies","ROST":"Ross Stores",
+  "RSG":"Republic Services","RTX":"RTX Corp","RVTY":"Revvity Inc.","SBAC":"SBA Communications",
+  "SBUX":"Starbucks Corp","SCHW":"Charles Schwab Corp","SJM":"J.M. Smucker Co.","SLB":"SLB (Schlumberger)",
+  "SMCI":"Super Micro Computer","SNA":"Snap-on Inc.","SNPS":"Synopsys Inc.","SO":"Southern Company",
+  "SPG":"Simon Property Group","SPGI":"S&P Global Inc.","SRE":"Sempra","STE":"STERIS plc",
+  "STLD":"Steel Dynamics","STT":"State Street Corp","STX":"Seagate Technology","STZ":"Constellation Brands",
+  "SWK":"Stanley Black & Decker","SWKS":"Skyworks Solutions","SYF":"Synchrony Financial","SYK":"Stryker Corp",
+  "SYY":"Sysco Corp","T":"AT&T Inc.","TAP":"Molson Coors Beverage","TDG":"TransDigm Group",
+  "TDY":"Teledyne Technologies","TECH":"Bio-Techne Corp","TEL":"TE Connectivity","TER":"Teradyne Inc.",
+  "TFC":"Truist Financial","TFX":"Teleflex Inc.","TGT":"Target Corp","TJX":"TJX Companies",
+  "TMO":"Thermo Fisher Scientific","TMUS":"T-Mobile US","TPR":"Tapestry Inc.","TRGP":"Targa Resources",
+  "TRMB":"Trimble Inc.","TROW":"T. Rowe Price Group","TRV":"Travelers Companies","TSCO":"Tractor Supply Co.",
+  "TSLA":"Tesla Inc.","TSN":"Tyson Foods","TT":"Trane Technologies","TTWO":"Take-Two Interactive",
+  "TXN":"Texas Instruments","TXT":"Textron Inc.","TYL":"Tyler Technologies","UAL":"United Airlines Holdings",
+  "UDR":"UDR Inc.","UHS":"Universal Health Services","ULTA":"Ulta Beauty","UNH":"UnitedHealth Group",
+  "UNP":"Union Pacific Corp","UPS":"United Parcel Service","URI":"United Rentals","USB":"U.S. Bancorp",
+  "V":"Visa Inc.","VFC":"V.F. Corp","VICI":"VICI Properties","VLO":"Valero Energy",
+  "VLTO":"Veralto Corp","VMC":"Vulcan Materials","VRSK":"Verisk Analytics","VRSN":"VeriSign Inc.",
+  "VRTX":"Vertex Pharmaceuticals","VTR":"Ventas Inc.","VTRS":"Viatris Inc.","VZ":"Verizon Communications",
+  "WAB":"Wabtec Corp","WAT":"Waters Corp","WDAY":"Workday Inc.","WBD":"Warner Bros. Discovery",
+  "WDC":"Western Digital","WELL":"Welltower Inc.","WFC":"Wells Fargo & Co.","WHR":"Whirlpool Corp",
+  "WM":"Waste Management","WMB":"Williams Companies","WMT":"Walmart Inc.","WRB":"W.R. Berkley Corp",
+  "WST":"West Pharmaceutical Services","WTW":"Willis Towers Watson","WY":"Weyerhaeuser Co.",
+  "WYNN":"Wynn Resorts","XEL":"Xcel Energy","XOM":"Exxon Mobil Corp","XYL":"Xylem Inc.",
+  "YUM":"Yum! Brands","ZBH":"Zimmer Biomet Holdings","ZBRA":"Zebra Technologies","ZTS":"Zoetis Inc."
+};
+
+// ─── STATE ────────────────────────────────────────────────────────────────────
+let running = false;
+let stopRequested = false;
+let t1Results = [];
+let t2Results = [];
+let startTime = null;
+let timerInterval = null;
+let screenedCount = 0;
+let errorCount = 0;
+let athTickers = new Set();
+
+// ─── EMA ─────────────────────────────────────────────────────────────────────
+function calcEMA(prices, period) {
+  const k = 2 / (period + 1);
+  const ema = new Array(prices.length);
+  ema[0] = prices[0];
+  for (let i = 1; i < prices.length; i++) {
+    ema[i] = prices[i] * k + ema[i - 1] * (1 - k);
+  }
+  return ema;
+}
+
+// ─── FIND VALID RECLAIM ───────────────────────────────────────────────────────
+function findValidReclaim(c, mu, md) {
+  const n = c.length;
+  let reclaimIdx = -1;
+  let belowEpStart = -1;
+
+  // Walk backwards to find the most recent reclaim crossover
+  for (let i = n - 1; i >= 1; i--) {
+    if (c[i] > mu[i] && c[i - 1] <= mu[i - 1]) {
+      // Found reclaim at i — look back for a below episode
+      let belowIdx = -1;
+      for (let j = i - 1; j >= Math.max(0, i - MAX_RECLAIM_BARS); j--) {
+        if (c[j] < md[j]) {
+          belowIdx = j;
+          break;
+        }
+      }
+      if (belowIdx === -1) continue; // no below episode found — try earlier reclaim
+
+      // Find start of below episode
+      let epStart = belowIdx;
+      for (let k = belowIdx - 1; k >= 0; k--) {
+        if (c[k] >= mu[k]) {
+          epStart = k + 1;
+          break;
+        }
+        if (k === 0) epStart = 0;
+      }
+
+      reclaimIdx = i;
+      belowEpStart = epStart;
+      break;
+    }
+  }
+
+  if (reclaimIdx === -1) return null;
+
+  // Verify no exit after reclaim (no c[k] < md[k] for k > reclaimIdx)
+  for (let k = reclaimIdx + 1; k < n; k++) {
+    if (c[k] < md[k]) return null;
+  }
+
+  return { reclaimIdx, belowEpStart };
+}
+
+// ─── SCREEN ATH ──────────────────────────────────────────────────────────────
+function screenATH(ohlcv) {
+  const n = ohlcv.length;
+  if (n < EMA_PERIOD + UPTREND_LOOKBACK + 10) return null;
+
+  const closes = ohlcv.map(d => d.close);
+  const highs  = ohlcv.map(d => d.high);
+  const dates  = ohlcv.map(d => d.date);
+
+  const ema = calcEMA(closes, EMA_PERIOD);
+  const mu  = ema.map(e => e * (1 + MA_BUFFER));
+  const md  = ema.map(e => e * (1 - MA_BUFFER));
+
+  // Uptrend filter
+  if (closes[n - 1] <= closes[n - 1 - UPTREND_LOOKBACK]) return null;
+
+  const reclaim = findValidReclaim(closes, mu, md);
+  if (!reclaim) return null;
+
+  const { reclaimIdx, belowEpStart } = reclaim;
+  const belowEpisodeBars = reclaimIdx - belowEpStart;
+  if (belowEpisodeBars > MAX_BELOW_BARS) return null;
+
+  const currentATH = Math.max(...highs);
+  const lastClose  = closes[n - 1];
+  const pctBelowATH = (currentATH - lastClose) / currentATH;
+  if (pctBelowATH > ATH_THRESHOLD) return null;
+
+  const barsSince    = n - 1 - reclaimIdx;
+  const currentEMA   = ema[n - 1];
+  const pctAboveEMA  = ((lastClose - currentEMA) / currentEMA) * 100;
+
+  return {
+    lastClose,
+    currentATH,
+    pctBelowATH,
+    pctAboveEMA,
+    barsSince,
+    belowEpisodeBars,
+    reclaimDate: dates[reclaimIdx],
+    currentEMA,
+  };
+}
+
+// ─── SCREEN SWING ────────────────────────────────────────────────────────────
+function screenSwing(ohlcv, athTickersSet) {
+  const n = ohlcv.length;
+  if (n < EMA_PERIOD + UPTREND_LOOKBACK + 10) return null;
+
+  const closes = ohlcv.map(d => d.close);
+  const highs  = ohlcv.map(d => d.high);
+  const dates  = ohlcv.map(d => d.date);
+
+  const ema = calcEMA(closes, EMA_PERIOD);
+  const mu  = ema.map(e => e * (1 + MA_BUFFER));
+  const md  = ema.map(e => e * (1 - MA_BUFFER));
+
+  // Uptrend filter
+  if (closes[n - 1] <= closes[n - 1 - UPTREND_LOOKBACK]) return null;
+
+  const reclaim = findValidReclaim(closes, mu, md);
+  if (!reclaim) return null;
+
+  const { reclaimIdx, belowEpStart } = reclaim;
+  const belowEpisodeBars = reclaimIdx - belowEpStart;
+  if (belowEpisodeBars > MAX_BELOW_BARS) return null;
+
+  const currentATH  = Math.max(...highs);
+  const lastClose   = closes[n - 1];
+  const pctBelowATH = (currentATH - lastClose) / currentATH;
+
+  // Skip if in ATH zone
+  if (lastClose >= currentATH * (1 - ATH_THRESHOLD)) return null;
+
+  // ATH drawdown filter
+  if (pctBelowATH > S2_ATH_MAX_DRAWDOWN) return null;
+
+  // Swing high window
+  const winStart = n - SWING_HIGH_MAX_BARS;
+  const winEnd   = n - SWING_HIGH_MIN_BARS;
+  if (winStart < 0 || winEnd < 0 || winStart >= winEnd) return null;
+
+  const windowHighs = highs.slice(winStart, winEnd);
+  const windowDates = dates.slice(winStart, winEnd);
+  let swingHigh = -Infinity;
+  let swingIdx  = -1;
+  for (let i = 0; i < windowHighs.length; i++) {
+    if (windowHighs[i] > swingHigh) {
+      swingHigh = windowHighs[i];
+      swingIdx  = i;
+    }
+  }
+
+  if (swingHigh <= lastClose) return null;
+
+  const pctToSwing = (swingHigh - lastClose) / swingHigh;
+  if (pctToSwing < SWING_NEAR_MIN || pctToSwing > SWING_NEAR_MAX) return null;
+
+  const barsSince   = n - 1 - reclaimIdx;
+  const currentEMA  = ema[n - 1];
+  const pctAboveEMA = ((lastClose - currentEMA) / currentEMA) * 100;
+  const swingDate   = windowDates[swingIdx];
+
+  return {
+    lastClose,
+    currentATH,
+    pctBelowATH,
+    pctAboveEMA,
+    barsSince,
+    belowEpisodeBars,
+    reclaimDate: dates[reclaimIdx],
+    swingHigh,
+    swingDate,
+    pctToSwing,
+    currentEMA,
+  };
+}
+
+// ─── PROBABILITY SCORING ─────────────────────────────────────────────────────
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+function scoreATH(pctBelowATH, pctAboveEMA, barsSince, belowBars) {
+  let prob = 88;
+  prob -= pctBelowATH * 5.5;
+  prob -= barsSince * 0.04;
+  prob += Math.min(pctAboveEMA * 0.25, 5);
+  prob -= belowBars * 0.8;
+  return clamp(prob, 40, 96);
+}
+
+function scoreSwing(pctToResistance, pctAboveEMA, barsSince, belowBars, pctBelowATH) {
+  let prob = 78;
+  prob -= pctToResistance * 6;
+  prob -= barsSince * 0.06;
+  prob += Math.min(pctAboveEMA * 0.3, 5);
+  prob -= belowBars * 0.8;
+  prob -= pctBelowATH * 1.2;
+  return clamp(prob, 35, 90);
+}
+
+// ─── FETCH OHLCV ─────────────────────────────────────────────────────────────
+async function fetchOHLCV(ticker) {
+  const yahooUrl = `https://query2.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=4y`;
+  const proxyUrl = `https://corsproxy.io/?url=${encodeURIComponent(yahooUrl)}`;
+
+  const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(15000) });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+  const json = await res.json();
+  const result = json.chart && json.chart.result && json.chart.result[0];
+  if (!result) throw new Error('No chart data');
+
+  const timestamps = result.timestamp;
+  const quote      = result.indicators.quote[0];
+  const adjClose   = (result.indicators.adjclose && result.indicators.adjclose[0] && result.indicators.adjclose[0].adjclose) || quote.close;
+
+  const data = timestamps.map((t, i) => ({
+    date:   new Date(t * 1000).toISOString().split('T')[0],
+    open:   quote.open[i],
+    high:   quote.high[i],
+    low:    quote.low[i],
+    close:  adjClose[i],
+    volume: quote.volume[i],
+  })).filter(d => d.close != null && d.high != null && d.close > 0 && d.high > 0);
+
+  return data;
+}
+
+// ─── PROCESS TICKER ──────────────────────────────────────────────────────────
+async function processTicker(ticker) {
+  const ohlcv = await fetchOHLCV(ticker);
+
+  const athResult = screenATH(ohlcv);
+  if (athResult) {
+    const prob = scoreATH(
+      athResult.pctBelowATH * 100,
+      athResult.pctAboveEMA,
+      athResult.barsSince,
+      athResult.belowEpisodeBars
+    );
+    athTickers.add(ticker);
+    return { type: 'ath', ticker, result: athResult, prob };
+  }
+
+  const swingResult = screenSwing(ohlcv, athTickers);
+  if (swingResult) {
+    const prob = scoreSwing(
+      swingResult.pctToSwing * 100,
+      swingResult.pctAboveEMA,
+      swingResult.barsSince,
+      swingResult.belowEpisodeBars,
+      swingResult.pctBelowATH * 100
+    );
+    return { type: 'swing', ticker, result: swingResult, prob };
+  }
+
+  return null;
+}
+
+// ─── UI HELPERS ───────────────────────────────────────────────────────────────
+function fmt(n, dec=2) { return n.toFixed(dec); }
+function fmtPct(n) { return fmt(n) + '%'; }
+function fmtPrice(p) { return '$' + p.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}); }
+
+function probBadge(prob) {
+  const p = Math.round(prob);
+  let cls = p >= 70 ? 'prob-green' : p >= 50 ? 'prob-yellow' : 'prob-orange';
+  return `<span class="prob-badge ${cls}">${p}%</span>`;
+}
+
+function buildRow(item) {
+  const { ticker, result, prob, type } = item;
+  const name  = COMPANY_NAMES[ticker] || ticker;
+  const price = fmtPrice(result.lastClose);
+
+  let metricHTML = '';
+  if (type === 'ath') {
+    metricHTML = `
+      <li>ATH: <span class="val good">${fmtPrice(result.currentATH)}</span> &nbsp;|&nbsp; ${fmtPct(result.pctBelowATH * 100)} below ATH</li>
+      <li>EMA(220): <span class="val">${fmtPrice(result.currentEMA)}</span> &nbsp;|&nbsp; <span class="${result.pctAboveEMA >= 0 ? 'good' : 'warn'}">${fmtPct(result.pctAboveEMA)} above EMA</span></li>
+      <li>Reclaim date: <span class="val">${result.reclaimDate}</span> &nbsp;|&nbsp; ${result.barsSince} bars ago</li>
+      <li>Below-EMA episode: <span class="val">${result.belowEpisodeBars} bars</span></li>
+    `;
+  } else {
+    metricHTML = `
+      <li>Swing high: <span class="val good">${fmtPrice(result.swingHigh)}</span> on ${result.swingDate}</li>
+      <li>Distance to swing: <span class="val warn">${fmtPct(result.pctToSwing * 100)}</span></li>
+      <li>ATH: <span class="val">${fmtPrice(result.currentATH)}</span> &nbsp;|&nbsp; ${fmtPct(result.pctBelowATH * 100)} below ATH</li>
+      <li>EMA(220): <span class="val">${fmtPrice(result.currentEMA)}</span> &nbsp;|&nbsp; <span class="${result.pctAboveEMA >= 0 ? 'good' : 'warn'}">${fmtPct(result.pctAboveEMA)} above EMA</span></li>
+      <li>Reclaim date: <span class="val">${result.reclaimDate}</span> &nbsp;|&nbsp; ${result.barsSince} bars ago</li>
+      <li>Below-EMA episode: <span class="val">${result.belowEpisodeBars} bars</span></li>
+    `;
+  }
+
+  return `<tr data-prob="${Math.round(prob)}">
+    <td>
+      <div class="stock-ticker">${ticker}</div>
+      <div class="stock-name">${name}</div>
+      <div class="stock-price">${price}</div>
+    </td>
+    <td><ul class="metrics">${metricHTML}</ul></td>
+    <td>${probBadge(prob)}</td>
+  </tr>`;
+}
+
+function insertSorted(tbody, item) {
+  const newProb = Math.round(item.prob);
+  const newRow  = document.createElement('tbody');
+  newRow.innerHTML = buildRow(item);
+  const tr = newRow.firstElementChild;
+
+  // Find insertion point (descending probability)
+  const rows = Array.from(tbody.querySelectorAll('tr[data-prob]'));
+  let inserted = false;
+  for (const row of rows) {
+    if (parseInt(row.dataset.prob) < newProb) {
+      tbody.insertBefore(tr, row);
+      inserted = true;
+      break;
+    }
+  }
+  if (!inserted) tbody.appendChild(tr);
+}
+
+function updateStats() {
+  document.getElementById('screenedCount').textContent = screenedCount;
+  document.getElementById('t1Count').textContent = t1Results.length;
+  document.getElementById('t2Count').textContent = t2Results.length;
+  document.getElementById('errorCount').textContent = errorCount;
+  document.getElementById('t1Badge').textContent = t1Results.length;
+  document.getElementById('t2Badge').textContent = t2Results.length;
+}
+
+function updateProgress(idx, ticker) {
+  const pct = Math.round((idx / TICKERS.length) * 100);
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressPct').textContent = pct + '%';
+  document.getElementById('currentTicker').textContent = ticker || '—';
+}
+
+// ─── MAIN LOOP ────────────────────────────────────────────────────────────────
+async function startScreen() {
+  if (running) return;
+  running      = true;
+  stopRequested = false;
+  t1Results    = [];
+  t2Results    = [];
+  screenedCount = 0;
+  errorCount   = 0;
+  athTickers   = new Set();
+
+  // Reset UI
+  document.getElementById('runBtn').disabled = true;
+  document.getElementById('stopBtn').style.display = 'inline-block';
+  document.getElementById('progressWrap').style.display = 'block';
+  document.getElementById('t1Body').innerHTML = '';
+  document.getElementById('t2Body').innerHTML = '';
+  updateStats();
+  updateProgress(0, '');
+
+  startTime = Date.now();
+  timerInterval = setInterval(() => {
+    const s = Math.round((Date.now() - startTime) / 1000);
+    document.getElementById('elapsedTime').textContent = s < 60 ? s + 's' : Math.floor(s/60) + 'm ' + (s%60) + 's';
+  }, 1000);
+
+  const BATCH = 5;
+
+  for (let i = 0; i < TICKERS.length && !stopRequested; i += BATCH) {
+    const batch = TICKERS.slice(i, i + BATCH);
+    updateProgress(i, batch[0]);
+
+    const promises = batch.map(async (ticker) => {
+      if (stopRequested) return;
+      try {
+        const item = await processTicker(ticker);
+        screenedCount++;
+        if (item) {
+          if (item.type === 'ath') {
+            t1Results.push(item);
+            insertSorted(document.getElementById('t1Body'), item);
+          } else {
+            t2Results.push(item);
+            insertSorted(document.getElementById('t2Body'), item);
+          }
+        }
+        updateStats();
+        updateProgress(screenedCount, ticker);
+      } catch (e) {
+        screenedCount++;
+        errorCount++;
+        updateStats();
+      }
+    });
+
+    await Promise.all(promises);
+
+    if (!stopRequested && i + BATCH < TICKERS.length) {
+      await new Promise(r => setTimeout(r, 300));
+    }
+  }
+
+  // Show empty states if no results
+  if (t1Results.length === 0) {
+    document.getElementById('t1Body').innerHTML = `<tr><td colspan="3"><div class="empty-state"><p>No stocks matched the ATH criteria</p></div></td></tr>`;
+  }
+  if (t2Results.length === 0) {
+    document.getElementById('t2Body').innerHTML = `<tr><td colspan="3"><div class="empty-state"><p>No stocks matched the Swing criteria</p></div></td></tr>`;
+  }
+
+  // Done
+  running = false;
+  clearInterval(timerInterval);
+  updateProgress(TICKERS.length, '');
+  document.getElementById('progressFill').style.width = '100%';
+  document.getElementById('progressPct').textContent = '100%';
+  document.getElementById('currentTicker').textContent = stopRequested ? 'Stopped' : 'Done';
+  document.getElementById('runBtn').disabled = false;
+  document.getElementById('stopBtn').style.display = 'none';
+}
+
+function stopScreen() {
+  stopRequested = true;
+  document.getElementById('stopBtn').disabled = true;
+  document.getElementById('stopBtn').textContent = 'Stopping…';
+  setTimeout(() => {
+    document.getElementById('stopBtn').style.display = 'none';
+    document.getElementById('stopBtn').disabled = false;
+    document.getElementById('stopBtn').textContent = '■ Stop';
+    document.getElementById('runBtn').disabled = false;
+    running = false;
+    clearInterval(timerInterval);
+  }, 2000);
+}
+
+// ─── EXPORT CSV ───────────────────────────────────────────────────────────────
+function exportCSV(type) {
+  const results = type === 'ath' ? t1Results : t2Results;
+  if (!results.length) { alert('No results to export.'); return; }
+
+  let csv = 'Ticker,Company,Price,Prob%,ATH,PctBelowATH%,EMA220,PctAboveEMA%,BarsSince,BelowBars,ReclaimDate';
+  if (type === 'swing') csv += ',SwingHigh,SwingDate,PctToSwing%';
+  csv += '\n';
+
+  for (const item of results) {
+    const r = item.result;
+    const name = (COMPANY_NAMES[item.ticker] || '').replace(/,/g, ';');
+    let row = [
+      item.ticker, name,
+      r.lastClose.toFixed(2),
+      Math.round(item.prob),
+      r.currentATH.toFixed(2),
+      (r.pctBelowATH * 100).toFixed(2),
+      r.currentEMA.toFixed(2),
+      r.pctAboveEMA.toFixed(2),
+      r.barsSince,
+      r.belowEpisodeBars,
+      r.reclaimDate,
+    ];
+    if (type === 'swing') {
+      row.push(r.swingHigh.toFixed(2), r.swingDate, (r.pctToSwing * 100).toFixed(2));
+    }
+    csv += row.join(',') + '\n';
+  }
+
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `screener_${type}_${new Date().toISOString().split('T')[0]}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+</script>
+</body>
+</html>

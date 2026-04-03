@@ -570,62 +570,84 @@ async function fetchAllTVFundamentals(allTickers) {
   const usTickers = allTickers.filter(t => !t.endsWith('.TO'));
   const caTickers = allTickers.filter(t =>  t.endsWith('.TO')).map(t => t.replace('.TO', ''));
 
+  // ── Correct TV Scanner request format ────────────────────────────────────────
+  // Must use filter→in_range NOT symbols→tickers (which requires "NASDAQ:AAPL" prefixes).
+  // Only corsproxy.io forwards POST bodies; allorigins.win is GET-only and drops the body.
+  function buildTVBody(chunk, chunkSize) {
+    return JSON.stringify({
+      columns: TV_FUND_COLUMNS,
+      filter:  [{ left: 'name', operation: 'in_range', right: chunk }],
+      options: { lang: 'en' },
+      range:   [0, chunkSize + 5],            // slight buffer
+      sort:    { sortBy: 'name', sortOrder: 'asc' },
+    });
+  }
+
+  function parseTVItem(item, market) {
+    const sym = item.s.split(':')[1];          // "NASDAQ:AAPL" → "AAPL"
+    const [marketCap, pe, roe, epsGrowth, fcf, grossMargin, revenueGrowth, perf5y] = item.d || [];
+    return {
+      key: market === 'canada' ? sym + '.TO' : sym,
+      data: {
+        marketCap:     marketCap    ?? null,
+        pe:            pe           ?? null,
+        roe:           roe          != null ? roe          * 100 : null,
+        epsGrowth:     epsGrowth    != null ? epsGrowth    * 100 : null,
+        fcf:           fcf          ?? null,
+        grossMargin:   grossMargin  != null ? grossMargin  * 100 : null,
+        revenueGrowth: revenueGrowth!= null ? revenueGrowth* 100 : null,
+        perf5Y:        perf5y       ?? null,  // TV already returns this in %
+      },
+    };
+  }
+
   async function scanMarket(tickers, market) {
     if (!tickers.length) return;
-    const CHUNK = 200; // keep chunks manageable; TV handles up to ~1000
+    const CHUNK = 150;
     for (let i = 0; i < tickers.length; i += CHUNK) {
       if (ltStop) return;
       const chunk  = tickers.slice(i, i + CHUNK);
       const tvUrl  = `https://scanner.tradingview.com/${market}/scan`;
-      const body   = JSON.stringify({ symbols: { tickers: chunk }, columns: TV_FUND_COLUMNS });
-      let ok = false;
+      const body   = buildTVBody(chunk, chunk.length);
 
-      // Try corsproxy.io first (supports POST + body); allorigins.win is GET-only
-      for (const proxyBase of [
-        'https://corsproxy.io/?url=',
-        'https://api.allorigins.win/raw?url=',  // fallback (GET-proxied POST may fail)
-      ]) {
+      // Only corsproxy.io reliably forwards POST bodies to external APIs
+      const proxies = [
+        `https://corsproxy.io/?url=${encodeURIComponent(tvUrl)}`,
+      ];
+      let success = false;
+      for (const proxy of proxies) {
         try {
-          const res = await fetch(proxyBase + encodeURIComponent(tvUrl), {
+          const res = await fetch(proxy, {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
             body,
-            signal:  AbortSignal.timeout(25000),
+            signal:  AbortSignal.timeout(28000),
           });
-          if (!res.ok) continue;
+          if (!res.ok) { console.warn(`TV ${market} HTTP ${res.status}`); continue; }
           const text = await res.text();
-          if (!text.trim().startsWith('{')) continue;
+          if (!text.trim().startsWith('{')) { console.warn(`TV ${market} non-JSON`); continue; }
           const json = JSON.parse(text);
-          for (const item of (json.data || [])) {
-            const sym = item.s.split(':')[1]; // "NASDAQ:AAPL" → "AAPL", "TSX:RY" → "RY"
-            const d = item.d || [];
-            const [marketCap, pe, roe, epsGrowth, fcf, grossMargin, revenueGrowth, perf5y] = d;
-            const key = market === 'canada' ? sym + '.TO' : sym;
-            tvFundCache[key] = {
-              marketCap:     marketCap    ?? null,
-              pe:            pe           ?? null,
-              roe:           roe          != null ? roe          * 100 : null,
-              epsGrowth:     epsGrowth    != null ? epsGrowth    * 100 : null,
-              fcf:           fcf          ?? null,
-              grossMargin:   grossMargin  != null ? grossMargin  * 100 : null,
-              revenueGrowth: revenueGrowth!= null ? revenueGrowth* 100 : null,
-              perf5Y:        perf5y       ?? null, // TV returns this already in %
-            };
+          const rows = json.data || [];
+          if (!rows.length) { console.warn(`TV ${market} chunk ${i}: 0 rows returned`); }
+          for (const item of rows) {
+            const { key, data } = parseTVItem(item, market);
+            tvFundCache[key] = data;
           }
-          ok = true;
+          console.log(`TV ${market} chunk ${i}: ${rows.length} rows`);
+          success = true;
           break;
-        } catch(e) { console.warn(`TV scan ${market} chunk ${i}:`, e); }
+        } catch(e) { console.warn(`TV ${market} chunk ${i}:`, e.message); }
       }
-      if (!ok) console.warn(`TV scan ${market} chunk ${i} failed all proxies`);
+      if (!success) console.warn(`TV ${market} chunk ${i}: all proxies failed`);
     }
   }
 
-  // Fetch US and CA in parallel — only 2 network round-trips total
+  // US and CA scanned in parallel — 2 round-trips total regardless of ticker count
   await Promise.all([
     scanMarket(usTickers, 'america'),
     scanMarket(caTickers, 'canada'),
   ]);
-  console.log(`TV fundamentals: ${Object.keys(tvFundCache).length} tickers loaded`);
+  console.log(`TV fundamentals loaded: ${Object.keys(tvFundCache).length}/${allTickers.length} tickers`);
   return tvFundCache;
 }
 
@@ -853,11 +875,13 @@ async function runLongTermScreen() {
       try {
         // TV cache has fundamentals for most tickers; Yahoo Finance only as fallback
         const tvFund = tvFundCache?.[ticker] ?? null;
+        if (!tvFund) console.warn(`TV cache MISS: ${ticker} — falling back to Yahoo Finance`);
         const [ohlcv, yFund] = await Promise.all([
           fetchOHLCV(ticker),
           tvFund ? Promise.resolve(null) : fetchFundamentals(ticker), // skip Yahoo if TV hit
         ]);
         const fundRaw = tvFund || yFund;
+        if (!fundRaw) console.warn(`No fundamental data at all for ${ticker}`);
         // 5Y perf: TradingView value preferred (matches TV screener); OHLCV as fallback
         const fiveYearPerf = (fundRaw?.perf5Y != null) ? fundRaw.perf5Y : calc5YPerf(ohlcv);
         // Map fundamentals to internal field names

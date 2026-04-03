@@ -285,7 +285,7 @@
       <table>
         <thead><tr>
           <th>Ticker</th><th>Type</th><th>Prob</th>
-          <th class="sortable" onclick="sortLive('buyDate')" id="liveSort-buyDate">Buy Date <span class="sort-icon">↕</span></th>
+          <th class="sortable" onclick="sortLive('buyDate')" id="liveSort-buyDate" style="white-space:nowrap">Buy Date <span class="sort-icon">↕</span></th>
           <th>Buy Price (USD)</th><th>Current (USD)</th>
           <th>Invested</th>
           <th class="sortable" onclick="sortLive('pnlUSD')" id="liveSort-pnlUSD">Unrealized P&amp;L <span class="sort-icon">↕</span></th>
@@ -319,8 +319,8 @@
       <table>
         <thead><tr>
           <th>Ticker</th><th>Type</th><th>Prob</th>
-          <th class="sortable" onclick="sortClosed('buyDate')" id="closedSort-buyDate">Buy Date <span class="sort-icon">↕</span></th>
-          <th class="sortable" onclick="sortClosed('sellDate')" id="closedSort-sellDate">Sell Date <span class="sort-icon">↕</span></th>
+          <th class="sortable" onclick="sortClosed('buyDate')" id="closedSort-buyDate" style="white-space:nowrap">Buy Date <span class="sort-icon">↕</span></th>
+          <th class="sortable" onclick="sortClosed('sellDate')" id="closedSort-sellDate" style="white-space:nowrap">Sell Date <span class="sort-icon">↕</span></th>
           <th>Buy Price</th><th>Sell Price</th>
           <th>Invested</th>
           <th class="sortable" onclick="sortClosed('pnlUSD')" id="closedSort-pnlUSD">P&amp;L (USD) <span class="sort-icon">↕</span></th>
@@ -1453,7 +1453,7 @@ function renderLive() {
       <td><div class="ticker-cell">${flagIcon(t.exchange)} ${t.ticker}${rvFlag}</div><div class="ticker-name">${escHtml(COMPANY_NAMES[t.ticker]||'')}</div>${partialTag}</td>
       <td>${typeBadge(t.type)}</td>
       <td>${pBadge(t.prob)}</td>
-      <td>${formatDate(t.buyDate)}<br><small style="color:#8b949e">${formatTimeEST(t.buyTime)}</small></td>
+      <td style="white-space:nowrap"><div>${formatDate(t.buyDate)}</div><small style="color:#8b949e">${formatTimeEST(t.buyTime)}</small></td>
       <td>$${t.buyPrice.toFixed(2)}</td>
       <td>$${cp.toFixed(2)}<br><small style="color:#8b949e">${chg>=0?'+':''}${chg.toFixed(2)}%</small></td>
       <td>$${t.invested}</td>
@@ -1561,7 +1561,7 @@ function renderClosed() {
     return `<tr>
       <td><div class="ticker-cell">${flagIcon(t.exchange)} ${t.ticker}</div><div class="ticker-name">${escHtml(COMPANY_NAMES[t.ticker]||'')}</div></td>
       <td>${typeBadge(t.type)}</td><td>${pBadge(t.prob)}</td>
-      <td>${formatDate(t.buyDate)}</td><td>${formatDate(t.sellDate||'—')}</td>
+      <td style="white-space:nowrap">${formatDate(t.buyDate)}</td><td style="white-space:nowrap">${formatDate(t.sellDate||'—')}</td>
       <td>$${t.buyPrice.toFixed(2)}</td>
       <td>$${(t.sellPrice||0).toFixed(2)}${partialNote}</td>
       <td>$${t.invested}</td>
@@ -1685,6 +1685,7 @@ function tick() {
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
+  updateClock(); // Run immediately so clock and market badge never show placeholder state
   cloudInit();
   // Load from cloud first — overwrites localStorage if cloud has data
   const cloudState = await loadStateFromCloud();

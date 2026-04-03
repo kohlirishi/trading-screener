@@ -463,62 +463,90 @@ async function fetchOHLCV(ticker) {
 }
 
 async function fetchFundamentals(ticker) {
-  // Fetch all required fundamental fields matching TradingView filters
-  const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${ticker}?modules=financialData,defaultKeyStatistics,summaryDetail,incomeStatementHistory`;
-  try {
-    const json = await fetchWithBackoff(url);
-    const result = json.quoteSummary?.result?.[0];
-    if (!result) return null;
-    const fd  = result.financialData       || {};
-    const ks  = result.defaultKeyStatistics || {};
-    const sd  = result.summaryDetail        || {};
-    const inc = result.incomeStatementHistory?.incomeStatementHistory || [];
+  // Yahoo Finance quoteSummary: allorigins.win works; corsproxy.io returns 403 for this endpoint.
+  // Strategy: try allorigins.win first across both query1/query2, then corsproxy.io as last resort.
+  const modules = 'financialData,defaultKeyStatistics,summaryDetail,incomeStatementHistory';
+  const yahooBases = [
+    `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${ticker}?modules=${modules}&corsDomain=finance.yahoo.com`,
+    `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${ticker}?modules=${modules}`,
+  ];
+  const proxyFns = [
+    u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+    u => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+  ];
 
-    // P/E Ratio (0 to 60, positive only)
-    const pe = sd.trailingPE?.raw || sd.forwardPE?.raw || null;
+  for (const base of yahooBases) {
+    for (const proxyFn of proxyFns) {
+      try {
+        const res = await fetch(proxyFn(base), { signal: AbortSignal.timeout(14000) });
+        if (!res.ok) continue;
+        const text = await res.text();
+        // Guard: proxy might return HTML error page instead of JSON
+        if (!text.trim().startsWith('{')) continue;
+        const json = JSON.parse(text);
+        const result = json.quoteSummary?.result?.[0];
+        if (!result) continue;
 
-    // Market Cap in USD
-    const marketCap = sd.marketCap?.raw || ks.marketCap?.raw || null;
+        const fd  = result.financialData            || {};
+        const ks  = result.defaultKeyStatistics      || {};
+        const sd  = result.summaryDetail             || {};
+        const inc = result.incomeStatementHistory?.incomeStatementHistory || [];
 
-    // ROE TTM
-    const roe = fd.returnOnEquity?.raw ? fd.returnOnEquity.raw * 100 : null;
+        // Helper: extract raw value from formatted Yahoo object or plain number
+        const raw = v => (v && typeof v === 'object' ? v.raw : v) ?? null;
 
-    // EPS Diluted Growth TTM YoY -- calculate from income statement
-    let epsGrowth = null;
-    if (ks.trailingEps?.raw != null && inc.length >= 2) {
-      const epsThis = ks.trailingEps.raw;
-      const epsPrev = inc[1]?.dilutedEPS?.raw;
-      if (epsPrev && epsPrev !== 0) {
-        epsGrowth = ((epsThis - epsPrev) / Math.abs(epsPrev)) * 100;
-      }
+        // P/E — trailing preferred, forward as fallback
+        const pe = raw(sd.trailingPE) ?? raw(sd.forwardPE) ?? null;
+
+        // Market Cap in USD
+        const marketCap = raw(sd.marketCap) ?? raw(ks.marketCap) ?? null;
+
+        // ROE TTM (Yahoo returns as decimal, e.g. 0.23 = 23%)
+        const roeRaw = raw(fd.returnOnEquity);
+        const roe = roeRaw != null ? roeRaw * 100 : null;
+
+        // EPS Diluted Growth TTM YoY
+        let epsGrowth = null;
+        if (raw(ks.trailingEps) != null && inc.length >= 2) {
+          const epsThis = raw(ks.trailingEps);
+          const epsPrev = raw(inc[1]?.dilutedEPS);
+          if (epsPrev && epsPrev !== 0) epsGrowth = ((epsThis - epsPrev) / Math.abs(epsPrev)) * 100;
+        }
+        if (epsGrowth == null) {
+          const eg = raw(fd.earningsGrowth);
+          if (eg != null) epsGrowth = eg * 100;
+        }
+        // Also try revenueGrowth as last fallback for EPS growth
+        if (epsGrowth == null) {
+          const rg = raw(fd.revenueGrowth);
+          if (rg != null) epsGrowth = rg * 100;
+        }
+
+        // Free Cash Flow TTM
+        const fcf = raw(fd.freeCashflow) ?? null;
+
+        // Gross Margin — try grossMargins field first, then compute from income statement
+        let grossMargin = null;
+        const gmRaw = raw(fd.grossMargins);
+        if (gmRaw != null) grossMargin = gmRaw * 100;
+        if (grossMargin == null && inc.length > 0) {
+          const gp  = raw(inc[0]?.grossProfit);
+          const rev = raw(inc[0]?.totalRevenue);
+          if (gp != null && rev && rev !== 0) grossMargin = (gp / rev) * 100;
+        }
+
+        // 52-week high/low (used for display context)
+        const fiftyTwoWeekHigh = raw(sd.fiftyTwoWeekHigh);
+        const fiftyTwoWeekLow  = raw(sd.fiftyTwoWeekLow);
+
+        // Revenue Growth (for display)
+        const revenueGrowth = raw(fd.revenueGrowth) != null ? raw(fd.revenueGrowth) * 100 : null;
+
+        return { pe, marketCap, roe, epsGrowth, fcf, grossMargin, fiftyTwoWeekHigh, fiftyTwoWeekLow, revenueGrowth };
+      } catch { continue; }
     }
-    // Fallback: use earningsGrowth if available
-    if (epsGrowth == null && fd.earningsGrowth?.raw != null) {
-      epsGrowth = fd.earningsGrowth.raw * 100;
-    }
-
-    // Free Cash Flow TTM
-    const fcf = fd.freeCashflow?.raw || null;
-
-    // Gross Margin (grossProfits / totalRevenue)
-    let grossMargin = null;
-    if (inc.length > 0) {
-      const gp  = inc[0]?.grossProfit?.raw;
-      const rev = inc[0]?.totalRevenue?.raw;
-      if (gp != null && rev && rev !== 0) grossMargin = (gp / rev) * 100;
-    }
-    // Fallback to grossMargins field
-    if (grossMargin == null && fd.grossMargins?.raw != null) {
-      grossMargin = fd.grossMargins.raw * 100;
-    }
-
-    // 5-Year Performance -- use 52wk high/low as proxy if 5Y not available
-    // Yahoo does not expose 5Y perf directly; we approximate from price history
-    const fiftyTwoWeekHigh = sd.fiftyTwoWeekHigh?.raw || null;
-    const fiftyTwoWeekLow  = sd.fiftyTwoWeekLow?.raw  || null;
-
-    return { pe, marketCap, roe, epsGrowth, fcf, grossMargin, fiftyTwoWeekHigh, fiftyTwoWeekLow };
-  } catch { return null; }
+  }
+  return null; // all 4 attempts failed
 }
 
 // Fetch 5-year performance separately from OHLCV (already fetched, pass it in)

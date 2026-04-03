@@ -252,6 +252,12 @@
     td { padding: 10px 12px; }
     .prob-badge { font-size: 14px; padding: 5px 10px; min-width: 56px; }
   }
+
+  /* SYNC BADGE */
+  .sync-badge { position: fixed; bottom: 16px; right: 16px; z-index: 999; padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; pointer-events: none; }
+  .sync-badge.synced { background: #1a3a1a; color: #3fb950; border: 1px solid #238636; }
+  .sync-badge.local  { background: #2a2a1a; color: #e3b341; border: 1px solid #9e6a03; }
+  .sync-badge.error  { background: #2a1a1a; color: #f85149; border: 1px solid #6e1a1a; }
 </style>
 </head>
 <body>
@@ -395,15 +401,9 @@
   For personal use only. Not financial advice. · Rule version: <strong id="footerVersion">v1</strong>
 </div>
 
-<!-- FIREBASE SDK (placeholder — fill in your config below before enabling) -->
-<!--
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
-import { getDatabase, ref, set, get } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-database.js";
-window._fbApp = initializeApp(FIREBASE_CONFIG);
-window._fbDb  = getDatabase(window._fbApp);
-</script>
--->
+<!-- Firebase compat SDK — always loaded; activated when CLOUD_ENABLED = true -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 
 <script>
 // ═══════════════════════════════════════════════════════════════════════
@@ -411,18 +411,61 @@ window._fbDb  = getDatabase(window._fbApp);
 // ═══════════════════════════════════════════════════════════════════════
 const RULE_VERSION = 'v3'; // v1=original, v2=volume+regime, v3=weekly+recency+prob-upgrade
 
-// ─── FIREBASE CONFIG (placeholder — fill in to enable cross-device sync) ─────
-const FIREBASE_CONFIG = {
-  apiKey:            "YOUR_API_KEY",
-  authDomain:        "YOUR_PROJECT.firebaseapp.com",
-  databaseURL:       "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
-  projectId:         "YOUR_PROJECT",
-  storageBucket:     "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId:             "YOUR_APP_ID"
+// ─── CLOUD CONFIG — fill in + set CLOUD_ENABLED = true to activate sync ──────
+const CLOUD_CONFIG = {
+  apiKey:            "AIzaSyBh-2AtLn7X_aDLqUnsobiGvcwvoUC1WAU",
+  authDomain:        "trading-tracker-b1051.firebaseapp.com",
+  databaseURL:       "https://trading-tracker-b1051-default-rtdb.firebaseio.com",
+  projectId:         "trading-tracker-b1051",
+  storageBucket:     "trading-tracker-b1051.firebasestorage.app",
+  messagingSenderId: "184541924815",
+  appId:             "1:184541924815:web:545a53b0a88dcac54b96ba",
+  measurementId:     "G-ETH3ZD8MY9"
 };
-// Set to true after filling in the config above:
-const FIREBASE_ENABLED = false;
+const CLOUD_ENABLED = true;
+
+// ─── CLOUD LAYER ──────────────────────────────────────────────────────────────
+let _db = null;
+function cloudInit() {
+  if (!CLOUD_ENABLED) { _setSyncBadge('local'); return; }
+  try {
+    if (!firebase.apps.length) firebase.initializeApp(CLOUD_CONFIG);
+    _db = firebase.database();
+    _setSyncBadge('synced');
+  } catch(e) { console.warn('Cloud init failed:', e); _setSyncBadge('error'); }
+}
+function cloudWrite(path, val) {
+  if (!CLOUD_ENABLED || !_db) return Promise.resolve();
+  return _db.ref(path).set(val)
+    .then(() => _setSyncBadge('synced'))
+    .catch(e => { console.warn('Cloud write failed:', e); _setSyncBadge('error'); });
+}
+function cloudRead(path, defaultVal) {
+  if (!CLOUD_ENABLED || !_db) return Promise.resolve(defaultVal);
+  return new Promise(resolve => {
+    const t = setTimeout(() => resolve(defaultVal), 5000);
+    _db.ref(path).once('value', snap => {
+      clearTimeout(t);
+      const v = snap.val();
+      _setSyncBadge('synced');
+      resolve(v !== null && v !== undefined ? v : defaultVal);
+    }, () => { clearTimeout(t); _setSyncBadge('error'); resolve(defaultVal); });
+  });
+}
+function cloudListen(path, cb) {
+  if (!CLOUD_ENABLED || !_db) return;
+  _db.ref(path).on('value',
+    snap => { _setSyncBadge('synced'); cb(snap.val()); },
+    e    => { console.warn('Cloud listen error:', e); _setSyncBadge('error'); });
+}
+function _setSyncBadge(state) {
+  const el = document.getElementById('syncBadge');
+  if (!el) return;
+  if (!CLOUD_ENABLED) { el.textContent = '🟡 Local Only'; el.className = 'sync-badge local'; return; }
+  if (state === 'synced') { el.textContent = '🟢 Cloud Synced'; el.className = 'sync-badge synced'; }
+  else if (state === 'error') { el.textContent = '🔴 Sync Error'; el.className = 'sync-badge error'; }
+  else { el.textContent = '🟡 Local Only'; el.className = 'sync-badge local'; }
+}
 
 // ─── MARKET CALENDAR (NYSE + TSX holidays 2024–2026) ─────────────────────────
 const NYSE_HOLIDAYS = new Set([
@@ -1110,6 +1153,7 @@ function checkRuleVersion() {
     document.getElementById('ruleBanner').style.display = 'flex';
   }
   localStorage.setItem('screener_rule_version', RULE_VERSION);
+  cloudWrite('screener/ruleVersion', RULE_VERSION);
 }
 
 // ─── BACKTEST SIMULATION (Change 11 — simplified) ─────────────────────────────
@@ -1123,14 +1167,20 @@ function loadBtData() {
     if (raw) btData = JSON.parse(raw);
   } catch {}
   if (btData) renderBtPanel();
+  // Also try cloud — prefer it if it has a newer runDate
+  cloudRead('screener/backtest', null).then(d => {
+    if (d && (!btData || (d.runDate || '') > (btData.runDate || ''))) {
+      btData = d;
+      try { localStorage.setItem('screener_backtest', JSON.stringify(d)); } catch {}
+      renderBtPanel();
+    }
+  });
 }
 
 function saveBtData(d) {
   btData = d;
   try { localStorage.setItem('screener_backtest', JSON.stringify(d)); } catch {}
-  if (FIREBASE_ENABLED && window._fbDb) {
-    // window._fbDb.ref('backtest').set(d); // Firebase write placeholder
-  }
+  cloudWrite('screener/backtest', d);
   renderBtPanel();
 }
 
@@ -1290,12 +1340,6 @@ async function startScreen() {
     document.getElementById('t2Body').innerHTML = `<tr><td colspan="3"><div class="empty-state"><p>No stocks matched the Swing criteria</p></div></td></tr>`;
   }
 
-  // Save results to Firebase if enabled
-  if (FIREBASE_ENABLED && window._fbDb) {
-    // Firebase write placeholder
-    // window._fbDb.ref('screener/lastRun').set({ date: new Date().toISOString(), t1: t1Results.length, t2: t2Results.length });
-  }
-
   running = false;
   clearInterval(timerInterval);
   updateProgress(tickersToRun.length, '');
@@ -1308,6 +1352,7 @@ async function startScreen() {
   const now = new Date().toLocaleString('en-US', { timeZone: 'America/New_York', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
   document.getElementById('lastRunStat').textContent = now + ' ET';
   localStorage.setItem('screener_last_run', now + ' ET');
+  cloudWrite('screener/lastRun', now + ' ET');
 }
 
 function stopScreen() {
@@ -1365,13 +1410,21 @@ function togglePanel(id) {
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+  cloudInit();
   checkRuleVersion();
   loadBtData();
   updateStats();
-  // Restore last run stat
+  // Restore last run stat — localStorage first, cloud preferred if available
   const lr = localStorage.getItem('screener_last_run');
   if (lr) document.getElementById('lastRunStat').textContent = lr;
+  cloudRead('screener/lastRun', null).then(cloudLr => {
+    if (cloudLr) {
+      document.getElementById('lastRunStat').textContent = cloudLr;
+      localStorage.setItem('screener_last_run', cloudLr);
+    }
+  });
 });
 </script>
+<div id="syncBadge" class="sync-badge local">🟡 Local Only</div>
 </body>
 </html>

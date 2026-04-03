@@ -384,7 +384,7 @@ async function fetchCADUSD() {
 // NOTE: TradingView MCP is the primary data source when running via Claude Code.
 // In browser context, Yahoo Finance is used as fallback for both technical + fundamental data.
 async function fetchOHLCV(ticker) {
-  const url = `https://query2.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=2y`;
+  const url = `https://query2.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=5y`;
   const json = await fetchWithBackoff(url);
   const result = json.chart?.result?.[0];
   if (!result) throw new Error('No data');
@@ -545,19 +545,20 @@ function analyzeStock(ticker, ohlcv, fundamentals, filters, fiveYearPerf) {
   const last52WLow       = wLows.slice(Math.max(0, wn - 52)).reduce((m, v) => v != null && v < m ? v : m, Infinity);
 
   // ── Technical checks (your exact TradingView filters) ────────────────────
+  // BUG 2 FIX: Use ternary so null data = null (skip) not false (hard fail)
   const techChecks = {
-    priceAboveEMA50d:   lastEMA50d  != null && lastClose > lastEMA50d,         // Price > EMA(50) Daily
-    low52wAboveSMA200w: lastWSMA200 != null && last52WLow > lastWSMA200,        // 52W Low > SMA(200) Weekly
-    priceAboveSMA50w:   lastWSMA50  != null && lastWeeklyClose > lastWSMA50,    // Price > SMA(50) Weekly
-    priceAboveSMA200w:  lastWSMA200 != null && lastWeeklyClose > lastWSMA200,   // Price > SMA(200) Weekly
-    goldenCrossWeekly:  lastWSMA50  != null && lastWSMA200 != null && lastWSMA50 > lastWSMA200, // SMA(50)W > SMA(200)W
+    priceAboveEMA50d:   lastEMA50d  != null ? lastClose > lastEMA50d : null,
+    low52wAboveSMA200w: lastWSMA200 != null ? last52WLow > lastWSMA200 : null,
+    priceAboveSMA50w:   lastWSMA50  != null ? lastWeeklyClose > lastWSMA50 : null,
+    priceAboveSMA200w:  lastWSMA200 != null ? lastWeeklyClose > lastWSMA200 : null,
+    goldenCrossWeekly:  (lastWSMA50 != null && lastWSMA200 != null) ? lastWSMA50 > lastWSMA200 : null,
   };
 
-  // ALL technical filters must pass -- if any fail, reject stock
-  if (!techChecks.priceAboveEMA50d)   return null;
-  if (!techChecks.priceAboveSMA200w)  return null;
-  if (!techChecks.priceAboveSMA50w)   return null;
-  if (!techChecks.goldenCrossWeekly)  return null;
+  // Hard-reject only when we have data AND the check explicitly fails (=== false)
+  if (techChecks.priceAboveEMA50d   === false) return null;
+  if (techChecks.priceAboveSMA200w  === false) return null;
+  if (techChecks.priceAboveSMA50w   === false) return null;
+  if (techChecks.goldenCrossWeekly  === false) return null;
   // 52W low > SMA200 weekly -- soft check (shown but does not hard reject)
   // (some large caps occasionally dip below; we still show them with a fail tag)
 

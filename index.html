@@ -3,404 +3,390 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>EMA Reclaim Screener — S&P 500 + TSX</title>
+<title>Investment Tracker — EMA Reclaim</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-  body {
-    background: #0d1117;
-    color: #c9d1d9;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;
-    font-size: 14px;
-    min-height: 100vh;
-  }
+  body { background: #0d1117; color: #c9d1d9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace; font-size: 14px; min-height: 100vh; }
 
   /* NAV */
-  .nav {
-    position: sticky;
-    top: 0;
-    z-index: 100;
-    background: #161b22;
-    border-bottom: 1px solid #30363d;
-    padding: 12px 20px;
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    flex-wrap: wrap;
-  }
-  .nav-title {
-    font-size: 18px;
-    font-weight: 700;
-    color: #f0f6fc;
-    flex: 1;
-    min-width: 180px;
-  }
-  .nav-title span { color: #238636; }
+  .nav { position: sticky; top: 0; z-index: 100; background: #161b22; border-bottom: 1px solid #30363d; padding: 10px 20px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .nav-title { font-size: 16px; font-weight: 700; color: #f0f6fc; flex: 1; min-width: 160px; }
+  .nav-btn { padding: 7px 14px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; white-space: nowrap; border: 1px solid #30363d; background: transparent; color: #8b949e; transition: all 0.15s; }
+  .nav-btn:hover { background: #21262d; color: #c9d1d9; }
+  .nav-btn.active { background: #1f6feb; color: #fff; border-color: #1f6feb; }
+  .nav-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .market-badge { padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+  .market-badge.open   { background: #1a3a1a; color: #3fb950; border: 1px solid #238636; }
+  .market-badge.closed { background: #2a1a1a; color: #f85149; border: 1px solid #6e1a1a; }
+  .et-time { font-size: 13px; color: #8b949e; font-variant-numeric: tabular-nums; }
 
-  #runBtn {
-    background: #238636;
-    color: #fff;
-    border: none;
-    padding: 10px 28px;
-    border-radius: 6px;
-    font-size: 15px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.2s;
-    white-space: nowrap;
-  }
-  #runBtn:hover { background: #2ea043; }
-  #runBtn:disabled { background: #3d4f3e; color: #8b949e; cursor: not-allowed; }
+  /* RULE VERSION BANNER */
+  #ruleBanner { display: none; background: #1c2e1c; border-bottom: 1px solid #238636; padding: 8px 20px; font-size: 13px; color: #3fb950; align-items: center; gap: 12px; flex-wrap: wrap; }
+  #ruleBanner button { background: transparent; border: 1px solid #238636; color: #3fb950; padding: 3px 10px; border-radius: 4px; font-size: 12px; cursor: pointer; }
 
-  #stopBtn {
-    background: #da3633;
-    color: #fff;
-    border: none;
-    padding: 10px 20px;
-    border-radius: 6px;
-    font-size: 15px;
-    font-weight: 600;
-    cursor: pointer;
-    display: none;
-    white-space: nowrap;
-  }
-  #stopBtn:hover { background: #f85149; }
+  /* REGIME CAUTION BANNER */
+  #regimeBanner { display: none; background: #2a1a00; border-bottom: 1px solid #d4a017; padding: 8px 20px; font-size: 13px; color: #d4a017; align-items: center; gap: 8px; }
 
-  /* STATS BAR */
-  .stats-bar {
-    background: #161b22;
-    border-bottom: 1px solid #30363d;
-    padding: 8px 20px;
-    display: flex;
-    align-items: center;
-    gap: 24px;
-    flex-wrap: wrap;
-    font-size: 13px;
-    color: #8b949e;
-  }
-  .stats-bar .stat { display: flex; align-items: center; gap: 6px; }
-  .stats-bar .stat strong { color: #c9d1d9; }
-  #errorCount { color: #f85149; }
+  /* AUTO-TRADE PAUSE BANNER */
+  #pauseBanner { display: none; background: #1a1a2a; border-bottom: 1px solid #1f6feb; padding: 8px 20px; font-size: 13px; color: #79c0ff; align-items: center; gap: 12px; flex-wrap: wrap; }
+  #pauseBanner button { background: transparent; border: 1px solid #1f6feb; color: #79c0ff; padding: 3px 10px; border-radius: 4px; font-size: 12px; cursor: pointer; }
 
-  /* PROGRESS */
-  .progress-wrap {
-    padding: 10px 20px;
-    background: #0d1117;
-    display: none;
-  }
-  .progress-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 6px;
-    font-size: 12px;
-    color: #8b949e;
-  }
-  #currentTicker { color: #58a6ff; font-weight: 600; min-width: 60px; }
-  .progress-bar-bg {
-    flex: 1;
-    height: 6px;
-    background: #21262d;
-    border-radius: 3px;
-    overflow: hidden;
-  }
-  .progress-bar-fill {
-    height: 100%;
-    background: linear-gradient(90deg, #238636, #2ea043);
-    border-radius: 3px;
-    transition: width 0.3s ease;
-    width: 0%;
-  }
-  #progressPct { min-width: 40px; text-align: right; }
+  /* CAPITAL BAR */
+  .capital-bar { background: #161b22; border-bottom: 1px solid #30363d; padding: 10px 20px; display: flex; gap: 20px; flex-wrap: wrap; align-items: center; }
+  .cap-stat { font-size: 13px; color: #8b949e; }
+  .cap-stat strong { color: #f0f6fc; }
+  .cap-stat .positive { color: #3fb950; }
+  .cap-stat .negative { color: #f85149; }
+  .currency-note { font-size: 11px; color: #484f58; margin-left: auto; }
 
-  /* MAIN CONTENT */
+  /* NOTIFICATION */
+  #notification { display: none; position: fixed; top: 70px; right: 20px; z-index: 200; background: #1c2e1c; border: 1px solid #238636; color: #3fb950; padding: 12px 16px; border-radius: 8px; font-size: 13px; max-width: 340px; }
+
+  /* MAIN */
   .main { padding: 20px; max-width: 1400px; margin: 0 auto; }
 
-  /* TABLE SECTION */
-  .table-section { margin-bottom: 40px; }
-  .table-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 14px;
-    flex-wrap: wrap;
-    gap: 10px;
-  }
-  .table-title {
-    font-size: 17px;
-    font-weight: 700;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-  .table-title.ath { color: #d4a017; }
-  .table-title.swing { color: #58a6ff; }
-  .table-title .badge {
-    background: #21262d;
-    border: 1px solid #30363d;
-    border-radius: 12px;
-    padding: 2px 10px;
-    font-size: 12px;
-    font-weight: 600;
-  }
-  .table-title.ath .badge { color: #d4a017; border-color: #d4a017; }
-  .table-title.swing .badge { color: #58a6ff; border-color: #58a6ff; }
+  /* CARDS */
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 14px; text-align: center; }
+  .card-val { font-size: 26px; font-weight: 700; }
+  .card-label { font-size: 11px; color: #8b949e; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .card.green .card-val { color: #3fb950; }
+  .card.red   .card-val { color: #f85149; }
+  .card.blue  .card-val { color: #58a6ff; }
+  .card.gold  .card-val { color: #e3b341; }
+  .card.open  .card-val { color: #f0f6fc; }
 
-  .export-btn {
-    background: #21262d;
-    color: #8b949e;
-    border: 1px solid #30363d;
-    padding: 6px 14px;
-    border-radius: 5px;
-    font-size: 12px;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-  .export-btn:hover { background: #30363d; color: #c9d1d9; }
+  /* SECTION */
+  .section { background: #161b22; border: 1px solid #30363d; border-radius: 8px; margin-bottom: 16px; overflow: hidden; }
+  .section-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid #30363d; font-weight: 600; font-size: 14px; color: #f0f6fc; flex-wrap: wrap; gap: 8px; }
+  .section-header .right { display: flex; gap: 8px; align-items: center; }
 
-  .table-wrap {
-    background: #161b22;
-    border: 1px solid #30363d;
-    border-radius: 8px;
-    overflow: hidden;
-    overflow-x: auto;
-  }
+  /* SCHEDULE */
+  .schedule-meta { padding: 10px 16px; border-bottom: 1px solid #21262d; display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: #8b949e; }
+  .schedule-meta span strong { color: #c9d1d9; }
+  .progress-wrap-inner { padding: 10px 16px; border-bottom: 1px solid #21262d; }
+  .progress-bar { background: #21262d; border-radius: 4px; height: 6px; overflow: hidden; margin-bottom: 4px; }
+  .progress-fill { background: #238636; height: 100%; transition: width 0.3s; }
+  .progress-text { font-size: 12px; color: #8b949e; }
 
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    min-width: 600px;
-  }
-  thead th {
-    background: #21262d;
-    padding: 12px 16px;
-    text-align: left;
-    font-size: 12px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: #8b949e;
-    border-bottom: 1px solid #30363d;
-    white-space: nowrap;
-  }
-  thead th:last-child { text-align: center; }
+  /* NOTES OUTCOME PANEL */
+  .notes-summary { padding: 10px 16px; background: #0d1117; border-bottom: 1px solid #21262d; display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: #8b949e; }
+  .ns-count { display: flex; align-items: center; gap: 5px; }
+  .ns-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 
-  tbody tr {
-    border-bottom: 1px solid #21262d;
-    transition: background 0.15s;
-    animation: fadeIn 0.3s ease;
-  }
-  tbody tr:last-child { border-bottom: none; }
-  tbody tr:hover { background: #1c2128; }
+  /* TABLES */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th { padding: 10px 14px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #8b949e; border-bottom: 1px solid #30363d; white-space: nowrap; }
+  td { padding: 10px 14px; border-bottom: 1px solid #21262d; font-size: 13px; vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #1c2128; }
+  .empty { text-align: center; color: #484f58; padding: 24px; }
+  .ticker-cell { font-weight: 600; color: #f0f6fc; font-size: 14px; }
+  .ticker-name { font-size: 11px; color: #8b949e; margin-top: 2px; }
+  .positive { color: #3fb950; }
+  .negative { color: #f85149; }
+  .neutral  { color: #8b949e; }
 
-  @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(-4px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
+  /* BADGES */
+  .badge { background: #21262d; border-radius: 10px; padding: 2px 8px; font-size: 11px; font-weight: 600; color: #8b949e; }
+  .badge-ath   { background: #1a3a2a; color: #3fb950; border: 1px solid #238636; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+  .badge-swing { background: #1a2a3a; color: #58a6ff; border: 1px solid #1f6feb; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+  .badge-profit { background: #1a3a1a; color: #3fb950; border: 1px solid #238636; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+  .badge-loss   { background: #2a1a1a; color: #f85149; border: 1px solid #6e1a1a; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+  .badge-manual { background: #2a2a1a; color: #e3b341; border: 1px solid #6e5a1a; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+  .badge-pending { background: #1a1a2a; color: #79c0ff; border: 1px solid #1f6feb; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+  .prob-badge { padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: 700; }
+  .prob-green  { background: #1a3a1a; color: #3fb950; }
+  .prob-yellow { background: #2a2a1a; color: #e3b341; }
 
-  td { padding: 12px 16px; vertical-align: top; }
-  td:last-child { text-align: center; vertical-align: middle; }
+  /* OUTCOME BADGES */
+  .outcome-win     { background: #1a3a1a; color: #3fb950; border: 1px solid #238636; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+  .outcome-loss    { background: #2a1a1a; color: #f85149; border: 1px solid #6e1a1a; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+  .outcome-fakeout { background: #2a1a2a; color: #d2a8ff; border: 1px solid #6e40c9; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+  .outcome-missed  { background: #2a2a1a; color: #e3b341; border: 1px solid #9e6a03; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+  .outcome-reentry { background: #1a2a3a; color: #58a6ff; border: 1px solid #1f6feb; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+  .outcome-rule    { background: #21262d; color: #8b949e; border: 1px solid #30363d; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: 600; }
 
-  .stock-ticker {
-    font-weight: 700;
-    font-size: 15px;
-    color: #f0f6fc;
-    letter-spacing: 0.03em;
-  }
-  .stock-name {
-    color: #8b949e;
-    font-size: 12px;
-    margin-top: 2px;
-  }
-  .stock-price {
-    color: #3fb950;
-    font-weight: 600;
-    font-size: 13px;
-    margin-top: 4px;
-  }
+  /* BUTTONS */
+  .btn { padding: 7px 14px; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; transition: opacity 0.15s; }
+  .btn:disabled { opacity: 0.5; cursor: default; }
+  .btn-green { background: #238636; color: #fff; }
+  .btn-green:hover:not(:disabled) { background: #2ea043; }
+  .btn-red { background: #6e1a1a; color: #f85149; border: 1px solid #6e1a1a; }
+  .btn-red:hover:not(:disabled) { background: #8a2020; }
+  .btn-ghost { background: transparent; color: #8b949e; border: 1px solid #30363d; }
+  .btn-ghost:hover:not(:disabled) { background: #21262d; color: #c9d1d9; }
+  .btn-close { background: #21262d; color: #8b949e; border: 1px solid #30363d; padding: 4px 10px; font-size: 11px; border-radius: 4px; cursor: pointer; }
+  .btn-close:hover { background: #2a1a1a; color: #f85149; }
 
-  .metrics { list-style: none; }
-  .metrics li {
-    font-size: 12px;
-    color: #8b949e;
-    padding: 1px 0;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-  .metrics li::before {
-    content: '•';
-    color: #30363d;
-    font-size: 14px;
-  }
-  .metrics .val { color: #c9d1d9; font-weight: 500; }
-  .metrics .good { color: #3fb950; }
-  .metrics .warn { color: #d4a017; }
+  /* NOTES */
+  .notes-desc { padding: 10px 16px; font-size: 12px; color: #8b949e; border-bottom: 1px solid #21262d; }
+  .note-item { display: flex; align-items: flex-start; gap: 10px; padding: 12px 16px; border-bottom: 1px solid #21262d; }
+  .note-num  { color: #58a6ff; font-weight: 700; flex-shrink: 0; min-width: 20px; }
+  .note-text { flex: 1; color: #c9d1d9; line-height: 1.5; white-space: pre-wrap; }
+  .note-del  { flex-shrink: 0; background: #1a3a1a; color: #3fb950; border: 1px solid #238636; padding: 3px 9px; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 600; }
+  .note-del:hover { background: #238636; }
+  .empty-notes { padding: 20px 16px; color: #484f58; font-size: 13px; }
 
-  /* PROBABILITY BADGE */
-  .prob-badge {
-    display: inline-block;
-    padding: 6px 14px;
-    border-radius: 20px;
-    font-size: 16px;
-    font-weight: 700;
-    min-width: 68px;
-    text-align: center;
-  }
-  .prob-green { background: #0d4a20; color: #3fb950; border: 1px solid #238636; }
-  .prob-yellow { background: #3d2f00; color: #d4a017; border: 1px solid #9e6a03; }
-  .prob-orange { background: #3d1a00; color: #f0883e; border: 1px solid #bd561d; }
+  /* DANGER ZONE */
+  .danger-zone { padding: 12px 16px; display: flex; align-items: center; gap: 12px; }
+  .danger-zone small { color: #8b949e; font-size: 12px; }
 
-  /* EMPTY STATE */
-  .empty-state {
-    padding: 40px 20px;
-    text-align: center;
-    color: #484f58;
-  }
-  .empty-state svg { margin-bottom: 12px; opacity: 0.4; }
-  .empty-state p { font-size: 14px; }
-
-  /* MINIMIZE BUTTON */
-  .minimize-btn {
-    background: #21262d;
-    border: 1px solid #30363d;
-    color: #8b949e;
-    border-radius: 6px;
-    width: 30px;
-    height: 30px;
-    font-size: 18px;
-    line-height: 1;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: background 0.15s, color 0.15s;
-    flex-shrink: 0;
-  }
-  .minimize-btn:hover { background: #30363d; color: #f0f6fc; }
-  .table-wrap.minimized { display: none; }
-  .table-section.minimized .table-wrap { display: none; }
-
-  /* FOOTER */
-  .footer {
-    text-align: center;
-    padding: 24px 20px;
-    color: #484f58;
-    font-size: 12px;
-    border-top: 1px solid #21262d;
-    margin-top: 20px;
-  }
-  .footer a { color: #58a6ff; text-decoration: none; }
-  .footer a:hover { text-decoration: underline; }
-
-  /* MOBILE */
-  @media (max-width: 600px) {
+  @media (max-width: 768px) {
     .nav { padding: 10px 14px; }
-    .nav-title { font-size: 15px; }
     .main { padding: 12px; }
-    td { padding: 10px 12px; }
-    .prob-badge { font-size: 14px; padding: 5px 10px; min-width: 56px; }
+    .cards { grid-template-columns: repeat(2, 1fr); }
+    th, td { padding: 8px 10px; font-size: 12px; }
   }
 </style>
 </head>
 <body>
 
+<!-- RULE VERSION BANNER -->
+<div id="ruleBanner">
+  <span>⚙ Tracker rules updated to <strong id="ruleVersionLabel">v3</strong>. Some open positions may have been auto-evaluated.</span>
+  <button onclick="document.getElementById('ruleBanner').style.display='none'">Dismiss</button>
+</div>
+
+<!-- REGIME CAUTION BANNER -->
+<div id="regimeBanner">
+  ⚠ <strong>Regime Caution:</strong> <span id="regimeCautionDetail">Benchmark below 220 EMA — auto-entries suppressed.</span>
+</div>
+
+<!-- AUTO-TRADE PAUSE BANNER -->
+<div id="pauseBanner">
+  ⏸ <strong>Auto-Trade Paused</strong> — 2 stop losses within 7 days. Resumes: <strong id="pauseResumeDate">—</strong>
+  <button onclick="STATE.autoTradePaused=false;STATE.autoTradePauseUntil=null;saveState();updatePauseBanner()">Manual Override (Resume Now)</button>
+</div>
+
 <!-- NAV -->
 <nav class="nav">
-  <div class="nav-title">🇺🇸 S&amp;P 500 + 🇨🇦 TSX &nbsp;<span>EMA Reclaim</span> Screener</div>
-  <a href="investment-tracker.html" style="background:#1f6feb;color:#fff;border:none;padding:10px 20px;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer;text-decoration:none;white-space:nowrap;">📈 Investment Tracker</a>
-  <button id="runBtn" onclick="startScreen()">&#9654; Run Screener</button>
-  <button id="stopBtn" onclick="stopScreen()">&#9632; Stop</button>
+  <div class="nav-title">📈 Investment Tracker</div>
+  <a href="index.html"             class="nav-btn active">📈 Tracker</a>
+  <a href="screener.html"          class="nav-btn">🔍 Screener</a>
+  <a href="long-term-tracker.html" class="nav-btn">📊 Long-Term</a>
+  <div class="nav-right">
+    <span id="marketStatus" class="market-badge closed">○ Checking…</span>
+    <span id="etTime" class="et-time">--:--:--</span>
+  </div>
 </nav>
 
-<!-- STATS BAR -->
-<div class="stats-bar">
-  <div class="stat">Screened: <strong id="screenedCount">0</strong> / <strong id="totalCount">515</strong></div>
-  <div class="stat">Table 1 (ATH): <strong id="t1Count">0</strong></div>
-  <div class="stat">Table 2 (Swing): <strong id="t2Count">0</strong></div>
-  <div class="stat">Errors: <strong id="errorCount">0</strong></div>
-  <div class="stat">Elapsed: <strong id="elapsedTime">0s</strong></div>
+<!-- CAPITAL BAR -->
+<div class="capital-bar">
+  <div class="cap-stat">Total Capital: <strong>$2,000 USD</strong></div>
+  <div class="cap-stat">Deployed: <strong id="deployedCap">$0.00</strong></div>
+  <div class="cap-stat">Available: <strong id="availCap">$2,000.00</strong></div>
+  <div class="cap-stat">Realized P&amp;L: <strong id="totalPnl" class="neutral">$0.00</strong></div>
+  <div class="cap-stat">Unrealized P&amp;L: <strong id="unrealPnl" class="neutral">$0.00</strong></div>
+  <div class="currency-note">All values in USD · TSX prices converted at live CADUSD rate · Paper trading simulation · $100/trade · 5% TP · 2% SL</div>
 </div>
 
-<!-- PROGRESS -->
-<div class="progress-wrap" id="progressWrap">
-  <div class="progress-row">
-    <span>Processing: <span id="currentTicker">—</span></span>
-    <div class="progress-bar-bg"><div class="progress-bar-fill" id="progressFill"></div></div>
-    <span id="progressPct">0%</span>
-  </div>
-</div>
+<!-- NOTIFICATION -->
+<div id="notification"></div>
 
-<!-- MAIN -->
 <div class="main">
 
-  <!-- TABLE 1 -->
-  <div class="table-section" id="t1Section">
-    <div class="table-header">
-      <div class="table-title ath">
-        &#9733; Near ATH — EMA Reclaim
-        <span class="badge" id="t1Badge">0</span>
-      </div>
-      <div style="display:flex;gap:8px;align-items:center;">
-        <button class="export-btn" onclick="exportCSV('ath')">&#8595; Export CSV</button>
-        <button class="minimize-btn" id="t1MinBtn" onclick="togglePanel('t1')" title="Minimize">&#8722;</button>
+  <!-- SUMMARY CARDS -->
+  <div class="cards">
+    <div class="card open"><div class="card-val" id="openCount">0</div><div class="card-label">Open Positions</div></div>
+    <div class="card green"><div class="card-val" id="profitCount">0</div><div class="card-label">Wins</div></div>
+    <div class="card red"><div class="card-val" id="lossCount">0</div><div class="card-label">Stop Losses</div></div>
+    <div class="card blue"><div class="card-val" id="winRate">—</div><div class="card-label">Win Rate</div></div>
+    <div class="card gold"><div class="card-val" id="totalTradesCount">0</div><div class="card-label">Total Trades</div></div>
+    <div class="card gold"><div class="card-val" id="cadUsdDisplay">—</div><div class="card-label">CADUSD Rate</div></div>
+  </div>
+
+  <!-- AUTO SCREENER -->
+  <div class="section">
+    <div class="section-header">
+      ⏰ Auto Screener
+      <div class="right">
+        <span id="regimeTag" style="font-size:11px;color:#8b949e;font-weight:400"></span>
+        <button id="runNowBtn" class="btn btn-green" onclick="runScreenerNow()">▶ Run Now</button>
+        <button id="stopBtn" class="btn btn-ghost" onclick="stopScreenerRun()" style="display:none">⏹ Stop</button>
       </div>
     </div>
-    <div class="table-wrap" id="t1Wrap">
-      <table id="t1Table">
-        <thead>
-          <tr>
-            <th>Stock</th>
-            <th>Why It Qualifies</th>
-            <th>Breakout Probability</th>
-          </tr>
-        </thead>
-        <tbody id="t1Body">
-          <tr><td colspan="3"><div class="empty-state"><p>Run the screener to see results</p></div></td></tr>
+    <div class="schedule-meta">
+      <span>📅 Runs daily: <strong>8:00 AM ET</strong> &amp; <strong>1:00 PM ET</strong> · Weekdays only · Skips market holidays</span>
+      <span id="lastRunInfo">Last run: <strong>never</strong></span>
+      <span id="nextRunInfo">Next: <strong>calculating…</strong></span>
+      <span>🎯 ATH: <strong>&gt;70%</strong> · Swing: <strong>&gt;50%</strong> · Partial: <strong>50% @ +3%</strong> · Final: <strong>+5%</strong> · Stop: <strong>−2% trail</strong></span>
+      <span>⏳ Entry: <strong>next-session confirmation</strong> · Cooldown: <strong>48h after stop loss</strong></span>
+    </div>
+    <div id="screenerProgressWrap" class="progress-wrap-inner" style="display:none">
+      <div class="progress-bar"><div class="progress-fill" id="screenerFill" style="width:0%"></div></div>
+      <div class="progress-text"><span id="screenerPct">0%</span> · <span id="screenerTicker">Starting…</span> · <span id="screenerPhase"></span></div>
+    </div>
+  </div>
+
+  <!-- PENDING ENTRIES (entry timing: wait for next-session confirmation) -->
+  <div class="section">
+    <div class="section-header">
+      ⏳ Pending Entries — Next-Session Confirmation <span class="badge" id="pendingBadge">0</span>
+      <small style="color:#8b949e;font-weight:400;font-size:12px">Signals waiting for next close above reclaim price to confirm entry</small>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>Ticker</th><th>Type</th><th>Prob</th>
+          <th>Signal Date</th><th>Reclaim Close</th>
+          <th>Confirm At</th><th>Action</th>
+        </tr></thead>
+        <tbody id="pendingBody">
+          <tr><td colspan="7" class="empty">No pending entries</td></tr>
         </tbody>
       </table>
     </div>
   </div>
 
-  <!-- TABLE 2 -->
-  <div class="table-section" id="t2Section">
-    <div class="table-header">
-      <div class="table-title swing">
-        &#9650; Swing High — EMA Reclaim
-        <span class="badge" id="t2Badge">0</span>
-      </div>
-      <div style="display:flex;gap:8px;align-items:center;">
-        <button class="export-btn" onclick="exportCSV('swing')">&#8595; Export CSV</button>
-        <button class="minimize-btn" id="t2MinBtn" onclick="togglePanel('t2')" title="Minimize">&#8722;</button>
-      </div>
+  <!-- LIVE POSITIONS -->
+  <div class="section">
+    <div class="section-header">
+      Live Positions <span class="badge" id="liveBadge">0</span>
+      <small style="color:#8b949e;font-weight:400;font-size:12px">Prices refresh every minute during market hours</small>
     </div>
-    <div class="table-wrap" id="t2Wrap">
-      <table id="t2Table">
-        <thead>
-          <tr>
-            <th>Stock</th>
-            <th>Why It Qualifies</th>
-            <th>Breakout Probability</th>
-          </tr>
-        </thead>
-        <tbody id="t2Body">
-          <tr><td colspan="3"><div class="empty-state"><p>Run the screener to see results</p></div></td></tr>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>Ticker</th><th>Type</th><th>Prob</th>
+          <th>Buy Date</th><th>Buy Price (USD)</th><th>Current (USD)</th>
+          <th>Invested</th><th>Unrealized P&amp;L</th><th>P&amp;L %</th>
+          <th>Targets</th><th>Trail Stop</th><th>Action</th>
+        </tr></thead>
+        <tbody id="liveBody">
+          <tr><td colspan="12" class="empty">No live positions</td></tr>
         </tbody>
       </table>
     </div>
   </div>
 
-</div>
+  <!-- CLOSED POSITIONS -->
+  <div class="section">
+    <div class="section-header">
+      Closed Positions <span class="badge" id="closedBadge">0</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>Ticker</th><th>Type</th><th>Prob</th>
+          <th>Buy Date</th><th>Sell Date</th>
+          <th>Buy Price</th><th>Sell Price</th>
+          <th>Invested</th><th>P&amp;L (USD)</th><th>P&amp;L %</th><th>Exit Reason</th>
+        </tr></thead>
+        <tbody id="closedBody">
+          <tr><td colspan="11" class="empty">No closed trades yet</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
 
-<!-- FOOTER -->
-<div class="footer">
-  Data sourced from <a href="https://finance.yahoo.com" target="_blank">Yahoo Finance</a> via
-  <a href="https://corsproxy.io" target="_blank">corsproxy.io</a>.
-  For personal use only. Not financial advice.
-</div>
+  <!-- SCREENER RUN LOG -->
+  <div class="section">
+    <div class="section-header">Screener Run Log</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>Date (ET)</th><th>Time (ET)</th>
+          <th>ATH Signals</th><th>Swing Signals</th>
+          <th>Trades Placed</th><th>Pending Entry</th>
+          <th>Skipped</th><th>Regime</th><th>Tickers Screened</th>
+        </tr></thead>
+        <tbody id="runLogBody">
+          <tr><td colspan="9" class="empty">No runs yet</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- LEARNING NOTES -->
+  <div class="section">
+    <div class="section-header">
+      📝 Learning Notes
+      <small style="color:#8b949e;font-weight:400;font-size:12px">Tag → outcome → fix code → mark Done</small>
+    </div>
+    <div class="notes-desc">Tag each note with ticker + signal type + outcome. Patterns over time reveal screener improvements.</div>
+    <div id="notesSummary" class="notes-summary"></div>
+    <div id="notesList"></div>
+    <div style="padding:12px 16px;border-top:1px solid #21262d">
+      <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;align-items:center">
+        <input id="noteTicker" placeholder="Ticker (e.g. AAPL)" style="background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;padding:7px 10px;font-size:13px;font-family:inherit;width:130px;">
+        <select id="noteSignalType" style="background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;padding:7px 10px;font-size:13px;font-family:inherit;">
+          <option value="ATH">ATH Signal</option>
+          <option value="Swing">Swing Signal</option>
+          <option value="General">General</option>
+        </select>
+        <select id="noteOutcome" style="background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;padding:7px 10px;font-size:13px;font-family:inherit;">
+          <option value="">Outcome (optional)</option>
+          <option value="Win">Win</option>
+          <option value="Loss">Loss</option>
+          <option value="Fakeout">Fakeout</option>
+          <option value="Missed Entry">Missed Entry</option>
+          <option value="Re-entry">Re-entry</option>
+          <option value="Rule Change Exit">Rule Change Exit</option>
+        </select>
+        <div style="display:flex;align-items:center;gap:6px">
+          <label style="font-size:12px;color:#8b949e;white-space:nowrap">Stop triggered:</label>
+          <input id="noteStopTs" type="date" style="background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;padding:6px 8px;font-size:13px;font-family:inherit;">
+        </div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <textarea id="noteInput" placeholder="Describe why stop hit / what pattern to fix…" style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;padding:8px 10px;font-size:13px;font-family:inherit;resize:vertical;min-height:56px;"></textarea>
+        <button class="btn btn-green" onclick="addNote()" style="align-self:flex-start">+ Add</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- DANGER ZONE -->
+  <div class="section">
+    <div class="section-header" style="color:#f85149">⚠ Data Management</div>
+    <div class="danger-zone">
+      <button class="btn btn-ghost" onclick="clearAllData()" style="border-color:#6e1a1a;color:#f85149;">🗑 Clear All Trade Data</button>
+      <small>Removes all trades, runs, and notes. Cannot be undone.</small>
+    </div>
+  </div>
+
+</div><!-- .main -->
+
+<!-- FIREBASE SDK placeholder — uncomment and fill config to enable cross-device sync -->
+<!--
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
+import { getDatabase, ref, set, get, onValue } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-database.js";
+const FIREBASE_CONFIG = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  databaseURL: "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
+  projectId: "YOUR_PROJECT",
+  storageBucket: "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+window._fbApp = initializeApp(FIREBASE_CONFIG);
+window._fbDb  = getDatabase(window._fbApp);
+</script>
+-->
 
 <script>
-// ─── CONSTANTS ───────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════
+// RULE VERSION — bump when strategy changes; triggers auto-exit on open positions
+// ═══════════════════════════════════════════════════════════════════════
+const RULE_VERSION    = 'v3';
+const FIREBASE_ENABLED = false; // set true after filling Firebase config above
+
+// ─── MARKET CALENDAR ─────────────────────────────────────────────────────────
+const NYSE_HOLIDAYS = new Set([
+  '2024-01-01','2024-01-15','2024-02-19','2024-03-29','2024-05-27','2024-06-19','2024-07-04','2024-09-02','2024-11-28','2024-12-25',
+  '2025-01-01','2025-01-20','2025-02-17','2025-04-18','2025-05-26','2025-06-19','2025-07-04','2025-09-01','2025-11-27','2025-12-25',
+  '2026-01-01','2026-01-19','2026-02-16','2026-04-03','2026-05-25','2026-06-19','2026-07-03','2026-09-07','2026-11-26','2026-12-25',
+]);
+const TSX_HOLIDAYS = new Set([
+  '2024-01-01','2024-02-19','2024-03-29','2024-05-20','2024-07-01','2024-08-05','2024-09-02','2024-10-14','2024-11-11','2024-12-25','2024-12-26',
+  '2025-01-01','2025-02-17','2025-04-18','2025-05-19','2025-07-01','2025-08-04','2025-09-01','2025-10-13','2025-11-11','2025-12-25','2025-12-26',
+  '2026-01-01','2026-02-16','2026-04-03','2026-05-18','2026-07-01','2026-08-03','2026-09-07','2026-10-12','2026-11-11','2026-12-25','2026-12-28',
+]);
+
+// ─── SCREENER CONSTANTS (must match screener.html) ────────────────────────────
 const EMA_PERIOD          = 220;
 const MA_BUFFER           = 0.003;
 const ATH_THRESHOLD       = 0.05;
@@ -411,640 +397,975 @@ const SWING_HIGH_MAX_BARS = 378;
 const SWING_NEAR_MIN      = 0.01;
 const SWING_NEAR_MAX      = 0.05;
 const S2_ATH_MAX_DRAWDOWN = 0.15;
+const VOLUME_CONFIRM_RATIO = 1.4;
+const WEEKLY_EMA_PERIOD   = 44;
+const WEEKLY_TREND_PENALTY = 15;
+
+// ─── INVESTMENT CONSTANTS ─────────────────────────────────────────────────────
+const ATH_PROB_THRESHOLD   = 70;
+const SWING_PROB_THRESHOLD = 50;
+const TRADE_SIZE           = 100;  // USD per trade
+const TOTAL_CAPITAL        = 2000; // USD
+const PARTIAL_TARGET       = 0.03;
+const PROFIT_TARGET        = 0.05;
+const STOP_LOSS            = 0.02;
+const COOLDOWN_MS          = 48 * 60 * 60 * 1000; // 48h (Change 7)
+const DOUBLE_STOP_WINDOW_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const DOUBLE_STOP_PAUSE_MS  = 7 * 24 * 60 * 60 * 1000; // 1 week pause
 
 // ─── UNIVERSE ─────────────────────────────────────────────────────────────────
-// S&P 500 (market cap >10B USD)
 const SP500_TICKERS = ["A","AAL","AAP","AAPL","ABBV","ABT","ACN","ADBE","ADI","ADM","ADP","ADSK","AEE","AEP","AES","AFL","AIG","AIZ","AJG","AKAM","ALB","ALGN","ALL","ALLE","AMAT","AMCR","AMD","AME","AMGN","AMP","AMT","AMZN","ANET","AON","AOS","APA","APD","APH","APTV","ARE","ATO","AVB","AVGO","AVY","AWK","AXON","AXP","AZO","BA","BAC","BALL","BAX","BBWI","BBY","BDX","BEN","BF-B","BG","BIIB","BK","BKNG","BKR","BLDR","BLK","BMY","BR","BRK-B","BRO","BSX","BWA","BX","BXP","C","CAG","CAH","CARR","CAT","CB","CBOE","CBRE","CCI","CCL","CDNS","CDW","CE","CEG","CF","CFG","CHD","CHRW","CHTR","CI","CINF","CL","CLX","CMA","CMCSA","CME","CMG","CMI","CMS","CNC","CNP","COF","COO","COP","COST","CPB","CPRT","CPT","CRL","CRM","CRWD","CSCO","CSGP","CSX","CTAS","CTRA","CTSH","CTVA","CVS","CVX","CZR","D","DAL","DAY","DD","DE","DECK","DG","DGX","DHI","DHR","DIS","DLR","DLTR","DOC","DOV","DOW","DPZ","DRI","DTE","DUK","DVA","DVN","DXCM","EA","EBAY","ECL","ED","EFX","EG","EIX","EL","ELV","EMN","EMR","ENPH","EOG","EPAM","EQIX","EQR","EQT","ES","ESS","ETN","ETR","ETSY","EVRG","EW","EXC","EXPD","EXPE","EXR","F","FANG","FAST","FCX","FDS","FDX","FE","FFIV","FICO","FIS","FITB","FMC","FOX","FOXA","FRT","FSLR","FTNT","FTV","GD","GDDY","GE","GEHC","GEN","GILD","GIS","GL","GLW","GM","GNRC","GOOGL","GOOG","GPC","GPN","GS","GWW","HAL","HAS","HBAN","HCA","HD","HIG","HII","HLT","HOLX","HON","HPE","HPQ","HRL","HSIC","HST","HSY","HUBB","HUM","HWM","IBM","ICE","IDXX","IEX","IFF","ILMN","INCY","INTC","INTU","INVH","IP","IQV","IR","IRM","ISRG","IT","ITW","IVZ","J","JBHT","JCI","JKHY","JNJ","JPM","KEY","KEYS","KHC","KIM","KLAC","KMB","KMI","KMX","KO","KR","L","LDOS","LEN","LH","LHX","LIN","LKQ","LLY","LMT","LNT","LOW","LRCX","LULU","LUV","LVS","LW","LYB","LYV","MA","MAA","MAR","MAS","MCD","MCHP","MCK","MCO","MDLZ","MDT","MET","META","MGM","MHK","MKC","MKTX","MLM","MNST","MO","MOH","MOS","MPC","MPWR","MRK","MRNA","MS","MSCI","MSFT","MSI","MTB","MTD","MU","NCLH","NDAQ","NEE","NEM","NFLX","NI","NKE","NOC","NOW","NRG","NSC","NTAP","NTRS","NUE","NVDA","NVR","NWS","NWSA","NXPI","O","ODFL","OKE","OMC","ON","ORCL","ORLY","OXY","PAYC","PAYX","PCAR","PCG","PEG","PEP","PFE","PFG","PG","PGR","PH","PHM","PKG","PLD","PM","PNC","PNR","PNW","PODD","POOL","PPG","PPL","PRU","PSA","PSX","PTC","PWR","PYPL","QCOM","QRVO","RCL","REG","REGN","RF","RJF","RL","RMD","ROK","ROL","ROP","ROST","RSG","RTX","RVTY","SBAC","SBUX","SCHW","SJM","SLB","SMCI","SNA","SNPS","SO","SPG","SPGI","SRE","STE","STLD","STT","STX","STZ","SWK","SWKS","SYF","SYK","SYY","T","TAP","TDG","TDY","TECH","TEL","TER","TFC","TFX","TGT","TJX","TMO","TMUS","TPR","TRGP","TRMB","TROW","TRV","TSCO","TSLA","TSN","TT","TTWO","TXN","TXT","TYL","UAL","UDR","UHS","ULTA","UNH","UNP","UPS","URI","USB","V","VFC","VICI","VLO","VLTO","VMC","VRSK","VRSN","VRTX","VTR","VTRS","VZ","WAB","WAT","WDAY","WBD","WDC","WELL","WFC","WHR","WM","WMB","WMT","WRB","WST","WTW","WY","WYNN","XEL","XOM","XYL","YUM","ZBH","ZBRA","ZTS"];
-// S&P/TSX Composite (market cap >20B CAD)
 const TSX_TICKERS = ["RY.TO","TD.TO","BN.TO","ENB.TO","CNR.TO","CP.TO","BMO.TO","BNS.TO","SHOP.TO","SU.TO","CNQ.TO","MFC.TO","TRP.TO","CM.TO","ATD.TO","WCN.TO","BAM.TO","SLF.TO","IFC.TO","TRI.TO","L.TO","POW.TO","GWO.TO","T.TO","BCE.TO","WPM.TO","ABX.TO","AEM.TO","NTR.TO","FTS.TO","DOL.TO","CSU.TO","QSR.TO","H.TO","GFL.TO","WSP.TO","MRU.TO","RCI-B.TO","IMO.TO","FFH.TO"];
 const TICKERS = [...SP500_TICKERS, ...TSX_TICKERS];
-
 const EXCHANGE_MAP = {};
 SP500_TICKERS.forEach(t => EXCHANGE_MAP[t] = 'US');
 TSX_TICKERS.forEach(t => EXCHANGE_MAP[t] = 'TSX');
 
-// ─── COMPANY NAMES ────────────────────────────────────────────────────────────
 const COMPANY_NAMES = {
-  "A":"Agilent Technologies","AAL":"American Airlines","AAP":"Advance Auto Parts","AAPL":"Apple Inc.",
-  "ABBV":"AbbVie Inc.","ABT":"Abbott Laboratories","ACN":"Accenture plc","ADBE":"Adobe Inc.",
-  "ADI":"Analog Devices","ADM":"Archer-Daniels-Midland","ADP":"Automatic Data Processing","ADSK":"Autodesk Inc.",
-  "AEE":"Ameren Corp","AEP":"American Electric Power","AES":"AES Corp","AFL":"Aflac Inc.",
-  "AIG":"American International Group","AIZ":"Assurant Inc.","AJG":"Arthur J. Gallagher","AKAM":"Akamai Technologies",
-  "ALB":"Albemarle Corp","ALGN":"Align Technology","ALL":"Allstate Corp","ALLE":"Allegion plc",
-  "AMAT":"Applied Materials","AMCR":"Amcor plc","AMD":"Advanced Micro Devices","AME":"AMETEK Inc.",
-  "AMGN":"Amgen Inc.","AMP":"Ameriprise Financial","AMT":"American Tower Corp","AMZN":"Amazon.com Inc.",
-  "ANET":"Arista Networks","AON":"Aon plc","AOS":"A.O. Smith Corp","APA":"APA Corp",
-  "APD":"Air Products & Chemicals","APH":"Amphenol Corp","APTV":"Aptiv plc","ARE":"Alexandria Real Estate",
-  "ATO":"Atmos Energy","AVB":"AvalonBay Communities","AVGO":"Broadcom Inc.","AVY":"Avery Dennison",
-  "AWK":"American Water Works","AXON":"Axon Enterprise","AXP":"American Express","AZO":"AutoZone Inc.",
-  "BA":"Boeing Co.","BAC":"Bank of America","BALL":"Ball Corp","BAX":"Baxter International",
-  "BBWI":"Bath & Body Works","BBY":"Best Buy Co.","BDX":"Becton Dickinson","BEN":"Franklin Resources",
-  "BF-B":"Brown-Forman Corp","BG":"Bunge Global","BIIB":"Biogen Inc.","BK":"Bank of New York Mellon",
-  "BKNG":"Booking Holdings","BKR":"Baker Hughes","BLDR":"Builders FirstSource","BLK":"BlackRock Inc.",
-  "BMY":"Bristol-Myers Squibb","BR":"Broadridge Financial","BRK-B":"Berkshire Hathaway","BRO":"Brown & Brown",
-  "BSX":"Boston Scientific","BWA":"BorgWarner Inc.","BX":"Blackstone Inc.","BXP":"BXP Inc.",
-  "C":"Citigroup Inc.","CAG":"Conagra Brands","CAH":"Cardinal Health","CARR":"Carrier Global",
-  "CAT":"Caterpillar Inc.","CB":"Chubb Ltd.","CBOE":"Cboe Global Markets","CBRE":"CBRE Group",
-  "CCI":"Crown Castle Inc.","CCL":"Carnival Corp","CDNS":"Cadence Design Systems","CDW":"CDW Corp",
-  "CE":"Celanese Corp","CEG":"Constellation Energy","CF":"CF Industries","CFG":"Citizens Financial",
-  "CHD":"Church & Dwight","CHRW":"C.H. Robinson","CHTR":"Charter Communications","CI":"Cigna Group",
-  "CINF":"Cincinnati Financial","CL":"Colgate-Palmolive","CLX":"Clorox Co.","CMA":"Comerica Inc.",
-  "CMCSA":"Comcast Corp","CME":"CME Group","CMG":"Chipotle Mexican Grill","CMI":"Cummins Inc.",
-  "CMS":"CMS Energy","CNC":"Centene Corp","CNP":"CenterPoint Energy","COF":"Capital One Financial",
-  "COO":"Cooper Companies","COP":"ConocoPhillips","COST":"Costco Wholesale","CPB":"Campbell Soup",
-  "CPRT":"Copart Inc.","CPT":"Camden Property Trust","CRL":"Charles River Laboratories","CRM":"Salesforce Inc.",
-  "CRWD":"CrowdStrike Holdings","CSCO":"Cisco Systems","CSGP":"CoStar Group","CSX":"CSX Corp",
-  "CTAS":"Cintas Corp","CTRA":"Coterra Energy","CTSH":"Cognizant Technology","CTVA":"Corteva Inc.",
-  "CVS":"CVS Health","CVX":"Chevron Corp","CZR":"Caesars Entertainment","D":"Dominion Energy",
-  "DAL":"Delta Air Lines","DAY":"Dayforce Inc.","DD":"DuPont de Nemours","DE":"Deere & Company",
-  "DECK":"Deckers Outdoor","DG":"Dollar General","DGX":"Quest Diagnostics","DHI":"D.R. Horton",
-  "DHR":"Danaher Corp","DIS":"Walt Disney Co.","DLR":"Digital Realty Trust","DLTR":"Dollar Tree",
-  "DOC":"Healthpeak Properties","DOV":"Dover Corp","DOW":"Dow Inc.","DPZ":"Domino's Pizza",
-  "DRI":"Darden Restaurants","DTE":"DTE Energy","DUK":"Duke Energy","DVA":"DaVita Inc.",
-  "DVN":"Devon Energy","DXCM":"Dexcom Inc.","EA":"Electronic Arts","EBAY":"eBay Inc.",
-  "ECL":"Ecolab Inc.","ED":"Consolidated Edison","EFX":"Equifax Inc.","EG":"Everest Group",
-  "EIX":"Edison International","EL":"Estee Lauder Companies","ELV":"Elevance Health","EMN":"Eastman Chemical",
-  "EMR":"Emerson Electric","ENPH":"Enphase Energy","EOG":"EOG Resources","EPAM":"EPAM Systems",
-  "EQIX":"Equinix Inc.","EQR":"Equity Residential","EQT":"EQT Corp","ES":"Eversource Energy",
-  "ESS":"Essex Property Trust","ETN":"Eaton Corp","ETR":"Entergy Corp","ETSY":"Etsy Inc.",
-  "EVRG":"Evergy Inc.","EW":"Edwards Lifesciences","EXC":"Exelon Corp","EXPD":"Expeditors Intl",
-  "EXPE":"Expedia Group","EXR":"Extra Space Storage","F":"Ford Motor Co.","FANG":"Diamondback Energy",
-  "FAST":"Fastenal Co.","FCX":"Freeport-McMoRan","FDS":"FactSet Research Systems","FDX":"FedEx Corp",
-  "FE":"FirstEnergy Corp","FFIV":"F5 Inc.","FICO":"Fair Isaac Corp","FIS":"Fidelity National Info",
-  "FITB":"Fifth Third Bancorp","FMC":"FMC Corp","FOX":"Fox Corp","FOXA":"Fox Corp Class A",
-  "FRT":"Federal Realty Investment","FSLR":"First Solar Inc.","FTNT":"Fortinet Inc.","FTV":"Fortive Corp",
-  "GD":"General Dynamics","GDDY":"GoDaddy Inc.","GE":"GE Aerospace","GEHC":"GE HealthCare Technologies",
-  "GEN":"Gen Digital Inc.","GILD":"Gilead Sciences","GIS":"General Mills","GL":"Globe Life Inc.",
-  "GLW":"Corning Inc.","GM":"General Motors","GNRC":"Generac Holdings","GOOGL":"Alphabet Inc. Class A",
-  "GOOG":"Alphabet Inc. Class C","GPC":"Genuine Parts Co.","GPN":"Global Payments","GS":"Goldman Sachs",
-  "GWW":"W.W. Grainger","HAL":"Halliburton Co.","HAS":"Hasbro Inc.","HBAN":"Huntington Bancshares",
-  "HCA":"HCA Healthcare","HD":"Home Depot","HIG":"Hartford Financial","HII":"Huntington Ingalls",
-  "HLT":"Hilton Worldwide","HOLX":"Hologic Inc.","HON":"Honeywell International","HPE":"Hewlett Packard Enterprise",
-  "HPQ":"HP Inc.","HRL":"Hormel Foods","HSIC":"Henry Schein","HST":"Host Hotels & Resorts",
-  "HSY":"Hershey Co.","HUBB":"Hubbell Inc.","HUM":"Humana Inc.","HWM":"Howmet Aerospace",
-  "IBM":"IBM Corp","ICE":"Intercontinental Exchange","IDXX":"IDEXX Laboratories","IEX":"IDEX Corp",
-  "IFF":"International Flavors","ILMN":"Illumina Inc.","INCY":"Incyte Corp","INTC":"Intel Corp",
-  "INTU":"Intuit Inc.","INVH":"Invitation Homes","IP":"International Paper","IQV":"IQVIA Holdings",
-  "IR":"Ingersoll Rand","IRM":"Iron Mountain","ISRG":"Intuitive Surgical","IT":"Gartner Inc.",
-  "ITW":"Illinois Tool Works","IVZ":"Invesco Ltd.","J":"Jacobs Solutions","JBHT":"J.B. Hunt Transport",
-  "JCI":"Johnson Controls","JKHY":"Jack Henry & Associates","JNJ":"Johnson & Johnson","JPM":"JPMorgan Chase",
-  "KEY":"KeyCorp","KEYS":"Keysight Technologies","KHC":"Kraft Heinz Co.","KIM":"Kimco Realty",
-  "KLAC":"KLA Corp","KMB":"Kimberly-Clark","KMI":"Kinder Morgan","KMX":"CarMax Inc.",
-  "KO":"Coca-Cola Co.","KR":"Kroger Co.","L":"Loews Corp","LDOS":"Leidos Holdings",
-  "LEN":"Lennar Corp","LH":"Laboratory Corp","LHX":"L3Harris Technologies","LIN":"Linde plc",
-  "LKQ":"LKQ Corp","LLY":"Eli Lilly and Co.","LMT":"Lockheed Martin","LNT":"Alliant Energy",
-  "LOW":"Lowe's Companies","LRCX":"Lam Research","LULU":"Lululemon Athletica","LUV":"Southwest Airlines",
-  "LVS":"Las Vegas Sands","LW":"Lamb Weston Holdings","LYB":"LyondellBasell Industries","LYV":"Live Nation Entertainment",
-  "MA":"Mastercard Inc.","MAA":"Mid-America Apartment","MAR":"Marriott International","MAS":"Masco Corp",
-  "MCD":"McDonald's Corp","MCHP":"Microchip Technology","MCK":"McKesson Corp","MCO":"Moody's Corp",
-  "MDLZ":"Mondelez International","MDT":"Medtronic plc","MET":"MetLife Inc.","META":"Meta Platforms",
-  "MGM":"MGM Resorts","MHK":"Mohawk Industries","MKC":"McCormick & Company","MKTX":"MarketAxess Holdings",
-  "MLM":"Martin Marietta Materials","MNST":"Monster Beverage","MO":"Altria Group","MOH":"Molina Healthcare",
-  "MOS":"Mosaic Co.","MPC":"Marathon Petroleum","MPWR":"Monolithic Power Systems","MRK":"Merck & Co.",
-  "MRNA":"Moderna Inc.","MS":"Morgan Stanley","MSCI":"MSCI Inc.","MSFT":"Microsoft Corp",
-  "MSI":"Motorola Solutions","MTB":"M&T Bank Corp","MTD":"Mettler-Toledo International","MU":"Micron Technology",
-  "NCLH":"Norwegian Cruise Line","NDAQ":"Nasdaq Inc.","NEE":"NextEra Energy","NEM":"Newmont Corp",
-  "NFLX":"Netflix Inc.","NI":"NiSource Inc.","NKE":"Nike Inc.","NOC":"Northrop Grumman",
-  "NOW":"ServiceNow Inc.","NRG":"NRG Energy","NSC":"Norfolk Southern","NTAP":"NetApp Inc.",
-  "NTRS":"Northern Trust","NUE":"Nucor Corp","NVDA":"Nvidia Corp","NVR":"NVR Inc.",
-  "NWS":"News Corp","NWSA":"News Corp Class A","NXPI":"NXP Semiconductors","O":"Realty Income Corp",
-  "ODFL":"Old Dominion Freight Line","OKE":"ONEOK Inc.","OMC":"Omnicom Group","ON":"ON Semiconductor",
-  "ORCL":"Oracle Corp","ORLY":"O'Reilly Automotive","OXY":"Occidental Petroleum","PAYC":"Paycom Software",
-  "PAYX":"Paychex Inc.","PCAR":"PACCAR Inc.","PCG":"PG&E Corp","PEG":"Public Service Enterprise",
-  "PEP":"PepsiCo Inc.","PFE":"Pfizer Inc.","PFG":"Principal Financial","PG":"Procter & Gamble",
-  "PGR":"Progressive Corp","PH":"Parker-Hannifin","PHM":"PulteGroup Inc.","PKG":"Packaging Corp",
-  "PLD":"Prologis Inc.","PM":"Philip Morris International","PNC":"PNC Financial Services","PNR":"Pentair plc",
-  "PNW":"Pinnacle West Capital","PODD":"Insulet Corp","POOL":"Pool Corp","PPG":"PPG Industries",
-  "PPL":"PPL Corp","PRU":"Prudential Financial","PSA":"Public Storage","PSX":"Phillips 66",
-  "PTC":"PTC Inc.","PWR":"Quanta Services","PYPL":"PayPal Holdings","QCOM":"Qualcomm Inc.",
-  "QRVO":"Qorvo Inc.","RCL":"Royal Caribbean Cruises","REG":"Regency Centers","REGN":"Regeneron Pharmaceuticals",
-  "RF":"Regions Financial","RJF":"Raymond James Financial","RL":"Ralph Lauren Corp","RMD":"ResMed Inc.",
-  "ROK":"Rockwell Automation","ROL":"Rollins Inc.","ROP":"Roper Technologies","ROST":"Ross Stores",
-  "RSG":"Republic Services","RTX":"RTX Corp","RVTY":"Revvity Inc.","SBAC":"SBA Communications",
-  "SBUX":"Starbucks Corp","SCHW":"Charles Schwab Corp","SJM":"J.M. Smucker Co.","SLB":"SLB (Schlumberger)",
-  "SMCI":"Super Micro Computer","SNA":"Snap-on Inc.","SNPS":"Synopsys Inc.","SO":"Southern Company",
-  "SPG":"Simon Property Group","SPGI":"S&P Global Inc.","SRE":"Sempra","STE":"STERIS plc",
-  "STLD":"Steel Dynamics","STT":"State Street Corp","STX":"Seagate Technology","STZ":"Constellation Brands",
-  "SWK":"Stanley Black & Decker","SWKS":"Skyworks Solutions","SYF":"Synchrony Financial","SYK":"Stryker Corp",
-  "SYY":"Sysco Corp","T":"AT&T Inc.","TAP":"Molson Coors Beverage","TDG":"TransDigm Group",
-  "TDY":"Teledyne Technologies","TECH":"Bio-Techne Corp","TEL":"TE Connectivity","TER":"Teradyne Inc.",
-  "TFC":"Truist Financial","TFX":"Teleflex Inc.","TGT":"Target Corp","TJX":"TJX Companies",
-  "TMO":"Thermo Fisher Scientific","TMUS":"T-Mobile US","TPR":"Tapestry Inc.","TRGP":"Targa Resources",
-  "TRMB":"Trimble Inc.","TROW":"T. Rowe Price Group","TRV":"Travelers Companies","TSCO":"Tractor Supply Co.",
-  "TSLA":"Tesla Inc.","TSN":"Tyson Foods","TT":"Trane Technologies","TTWO":"Take-Two Interactive",
-  "TXN":"Texas Instruments","TXT":"Textron Inc.","TYL":"Tyler Technologies","UAL":"United Airlines Holdings",
-  "UDR":"UDR Inc.","UHS":"Universal Health Services","ULTA":"Ulta Beauty","UNH":"UnitedHealth Group",
-  "UNP":"Union Pacific Corp","UPS":"United Parcel Service","URI":"United Rentals","USB":"U.S. Bancorp",
-  "V":"Visa Inc.","VFC":"V.F. Corp","VICI":"VICI Properties","VLO":"Valero Energy",
-  "VLTO":"Veralto Corp","VMC":"Vulcan Materials","VRSK":"Verisk Analytics","VRSN":"VeriSign Inc.",
-  "VRTX":"Vertex Pharmaceuticals","VTR":"Ventas Inc.","VTRS":"Viatris Inc.","VZ":"Verizon Communications",
-  "WAB":"Wabtec Corp","WAT":"Waters Corp","WDAY":"Workday Inc.","WBD":"Warner Bros. Discovery",
-  "WDC":"Western Digital","WELL":"Welltower Inc.","WFC":"Wells Fargo & Co.","WHR":"Whirlpool Corp",
-  "WM":"Waste Management","WMB":"Williams Companies","WMT":"Walmart Inc.","WRB":"W.R. Berkley Corp",
-  "WST":"West Pharmaceutical Services","WTW":"Willis Towers Watson","WY":"Weyerhaeuser Co.",
-  "WYNN":"Wynn Resorts","XEL":"Xcel Energy","XOM":"Exxon Mobil Corp","XYL":"Xylem Inc.",
-  "YUM":"Yum! Brands","ZBH":"Zimmer Biomet Holdings","ZBRA":"Zebra Technologies","ZTS":"Zoetis Inc.",
-  // TSX Large Cap (>20B CAD)
-  "RY.TO":"Royal Bank of Canada","TD.TO":"Toronto-Dominion Bank","BN.TO":"Brookfield Corp",
-  "ENB.TO":"Enbridge Inc.","CNR.TO":"Canadian National Railway","CP.TO":"Canadian Pacific Kansas City",
-  "BMO.TO":"Bank of Montreal","BNS.TO":"Bank of Nova Scotia","SHOP.TO":"Shopify Inc.",
-  "SU.TO":"Suncor Energy","CNQ.TO":"Canadian Natural Resources","MFC.TO":"Manulife Financial",
-  "TRP.TO":"TC Energy Corp","CM.TO":"CIBC","ATD.TO":"Alimentation Couche-Tard",
-  "WCN.TO":"Waste Connections","BAM.TO":"Brookfield Asset Management","SLF.TO":"Sun Life Financial",
-  "IFC.TO":"Intact Financial","TRI.TO":"Thomson Reuters","L.TO":"Loblaw Companies",
-  "POW.TO":"Power Corp of Canada","GWO.TO":"Great-West Lifeco","T.TO":"TELUS Corp",
-  "BCE.TO":"BCE Inc.","WPM.TO":"Wheaton Precious Metals","ABX.TO":"Barrick Gold",
-  "AEM.TO":"Agnico Eagle Mines","NTR.TO":"Nutrien Ltd.","FTS.TO":"Fortis Inc.",
-  "DOL.TO":"Dollarama Inc.","CSU.TO":"Constellation Software","QSR.TO":"Restaurant Brands Intl",
-  "H.TO":"Hydro One","GFL.TO":"GFL Environmental","WSP.TO":"WSP Global",
-  "MRU.TO":"Metro Inc.","RCI-B.TO":"Rogers Communications","IMO.TO":"Imperial Oil","FFH.TO":"Fairfax Financial"
+  "A":"Agilent Technologies","AAL":"American Airlines","AAP":"Advance Auto Parts","AAPL":"Apple Inc.","ABBV":"AbbVie Inc.","ABT":"Abbott Laboratories","ACN":"Accenture plc","ADBE":"Adobe Inc.","ADI":"Analog Devices","ADM":"Archer-Daniels-Midland","ADP":"Automatic Data Processing","ADSK":"Autodesk Inc.","AEE":"Ameren Corp","AEP":"American Electric Power","AES":"AES Corp","AFL":"Aflac Inc.","AIG":"American International Group","AIZ":"Assurant Inc.","AJG":"Arthur J. Gallagher","AKAM":"Akamai Technologies","ALB":"Albemarle Corp","ALGN":"Align Technology","ALL":"Allstate Corp","ALLE":"Allegion plc","AMAT":"Applied Materials","AMCR":"Amcor plc","AMD":"Advanced Micro Devices","AME":"AMETEK Inc.","AMGN":"Amgen Inc.","AMP":"Ameriprise Financial","AMT":"American Tower Corp","AMZN":"Amazon.com Inc.","ANET":"Arista Networks","AON":"Aon plc","AOS":"A.O. Smith Corp","APA":"APA Corp","APD":"Air Products & Chemicals","APH":"Amphenol Corp","APTV":"Aptiv plc","ARE":"Alexandria Real Estate","ATO":"Atmos Energy","AVB":"AvalonBay Communities","AVGO":"Broadcom Inc.","AVY":"Avery Dennison","AWK":"American Water Works","AXON":"Axon Enterprise","AXP":"American Express","AZO":"AutoZone Inc.","BA":"Boeing Co.","BAC":"Bank of America","BALL":"Ball Corp","BAX":"Baxter International","BBWI":"Bath & Body Works","BBY":"Best Buy Co.","BDX":"Becton Dickinson","BEN":"Franklin Resources","BF-B":"Brown-Forman Corp","BG":"Bunge Global","BIIB":"Biogen Inc.","BK":"Bank of New York Mellon","BKNG":"Booking Holdings","BKR":"Baker Hughes","BLDR":"Builders FirstSource","BLK":"BlackRock Inc.","BMY":"Bristol-Myers Squibb","BR":"Broadridge Financial","BRK-B":"Berkshire Hathaway","BRO":"Brown & Brown","BSX":"Boston Scientific","BWA":"BorgWarner Inc.","BX":"Blackstone Inc.","BXP":"BXP Inc.","C":"Citigroup Inc.","CAG":"Conagra Brands","CAH":"Cardinal Health","CARR":"Carrier Global","CAT":"Caterpillar Inc.","CB":"Chubb Ltd.","CBOE":"Cboe Global Markets","CBRE":"CBRE Group","CCI":"Crown Castle Inc.","CCL":"Carnival Corp","CDNS":"Cadence Design Systems","CDW":"CDW Corp","CE":"Celanese Corp","CEG":"Constellation Energy","CF":"CF Industries","CFG":"Citizens Financial","CHD":"Church & Dwight","CHRW":"C.H. Robinson","CHTR":"Charter Communications","CI":"Cigna Group","CINF":"Cincinnati Financial","CL":"Colgate-Palmolive","CLX":"Clorox Co.","CMA":"Comerica Inc.","CMCSA":"Comcast Corp","CME":"CME Group","CMG":"Chipotle Mexican Grill","CMI":"Cummins Inc.","CMS":"CMS Energy","CNC":"Centene Corp","CNP":"CenterPoint Energy","COF":"Capital One Financial","COO":"Cooper Companies","COP":"ConocoPhillips","COST":"Costco Wholesale","CPB":"Campbell Soup","CPRT":"Copart Inc.","CPT":"Camden Property Trust","CRL":"Charles River Laboratories","CRM":"Salesforce Inc.","CRWD":"CrowdStrike Holdings","CSCO":"Cisco Systems","CSGP":"CoStar Group","CSX":"CSX Corp","CTAS":"Cintas Corp","CTRA":"Coterra Energy","CTSH":"Cognizant Technology","CTVA":"Corteva Inc.","CVS":"CVS Health","CVX":"Chevron Corp","CZR":"Caesars Entertainment","D":"Dominion Energy","DAL":"Delta Air Lines","DAY":"Dayforce Inc.","DD":"DuPont de Nemours","DE":"Deere & Company","DECK":"Deckers Outdoor","DG":"Dollar General","DGX":"Quest Diagnostics","DHI":"D.R. Horton","DHR":"Danaher Corp","DIS":"Walt Disney Co.","DLR":"Digital Realty Trust","DLTR":"Dollar Tree","DOC":"Healthpeak Properties","DOV":"Dover Corp","DOW":"Dow Inc.","DPZ":"Domino's Pizza","DRI":"Darden Restaurants","DTE":"DTE Energy","DUK":"Duke Energy","DVA":"DaVita Inc.","DVN":"Devon Energy","DXCM":"Dexcom Inc.","EA":"Electronic Arts","EBAY":"eBay Inc.","ECL":"Ecolab Inc.","ED":"Consolidated Edison","EFX":"Equifax Inc.","EG":"Everest Group","EIX":"Edison International","EL":"Estee Lauder Companies","ELV":"Elevance Health","EMN":"Eastman Chemical","EMR":"Emerson Electric","ENPH":"Enphase Energy","EOG":"EOG Resources","EPAM":"EPAM Systems","EQIX":"Equinix Inc.","EQR":"Equity Residential","EQT":"EQT Corp","ES":"Eversource Energy","ESS":"Essex Property Trust","ETN":"Eaton Corp","ETR":"Entergy Corp","ETSY":"Etsy Inc.","EVRG":"Evergy Inc.","EW":"Edwards Lifesciences","EXC":"Exelon Corp","EXPD":"Expeditors Intl","EXPE":"Expedia Group","EXR":"Extra Space Storage","F":"Ford Motor Co.","FANG":"Diamondback Energy","FAST":"Fastenal Co.","FCX":"Freeport-McMoRan","FDS":"FactSet Research Systems","FDX":"FedEx Corp","FE":"FirstEnergy Corp","FFIV":"F5 Inc.","FICO":"Fair Isaac Corp","FIS":"Fidelity National Info","FITB":"Fifth Third Bancorp","FMC":"FMC Corp","FOX":"Fox Corp","FOXA":"Fox Corp Class A","FRT":"Federal Realty Investment","FSLR":"First Solar Inc.","FTNT":"Fortinet Inc.","FTV":"Fortive Corp","GD":"General Dynamics","GDDY":"GoDaddy Inc.","GE":"GE Aerospace","GEHC":"GE HealthCare Technologies","GEN":"Gen Digital Inc.","GILD":"Gilead Sciences","GIS":"General Mills","GL":"Globe Life Inc.","GLW":"Corning Inc.","GM":"General Motors","GNRC":"Generac Holdings","GOOGL":"Alphabet Inc. Class A","GOOG":"Alphabet Inc. Class C","GPC":"Genuine Parts Co.","GPN":"Global Payments","GS":"Goldman Sachs","GWW":"W.W. Grainger","HAL":"Halliburton Co.","HAS":"Hasbro Inc.","HBAN":"Huntington Bancshares","HCA":"HCA Healthcare","HD":"Home Depot","HIG":"Hartford Financial","HII":"Huntington Ingalls","HLT":"Hilton Worldwide","HOLX":"Hologic Inc.","HON":"Honeywell International","HPE":"Hewlett Packard Enterprise","HPQ":"HP Inc.","HRL":"Hormel Foods","HSIC":"Henry Schein","HST":"Host Hotels & Resorts","HSY":"Hershey Co.","HUBB":"Hubbell Inc.","HUM":"Humana Inc.","HWM":"Howmet Aerospace","IBM":"IBM Corp","ICE":"Intercontinental Exchange","IDXX":"IDEXX Laboratories","IEX":"IDEX Corp","IFF":"International Flavors","ILMN":"Illumina Inc.","INCY":"Incyte Corp","INTC":"Intel Corp","INTU":"Intuit Inc.","INVH":"Invitation Homes","IP":"International Paper","IQV":"IQVIA Holdings","IR":"Ingersoll Rand","IRM":"Iron Mountain","ISRG":"Intuitive Surgical","IT":"Gartner Inc.","ITW":"Illinois Tool Works","IVZ":"Invesco Ltd.","J":"Jacobs Solutions","JBHT":"J.B. Hunt Transport","JCI":"Johnson Controls","JKHY":"Jack Henry & Associates","JNJ":"Johnson & Johnson","JPM":"JPMorgan Chase","KEY":"KeyCorp","KEYS":"Keysight Technologies","KHC":"Kraft Heinz Co.","KIM":"Kimco Realty","KLAC":"KLA Corp","KMB":"Kimberly-Clark","KMI":"Kinder Morgan","KMX":"CarMax Inc.","KO":"Coca-Cola Co.","KR":"Kroger Co.","L":"Loews Corp","LDOS":"Leidos Holdings","LEN":"Lennar Corp","LH":"Laboratory Corp","LHX":"L3Harris Technologies","LIN":"Linde plc","LKQ":"LKQ Corp","LLY":"Eli Lilly and Co.","LMT":"Lockheed Martin","LNT":"Alliant Energy","LOW":"Lowe's Companies","LRCX":"Lam Research","LULU":"Lululemon Athletica","LUV":"Southwest Airlines","LVS":"Las Vegas Sands","LW":"Lamb Weston Holdings","LYB":"LyondellBasell Industries","LYV":"Live Nation Entertainment","MA":"Mastercard Inc.","MAA":"Mid-America Apartment","MAR":"Marriott International","MAS":"Masco Corp","MCD":"McDonald's Corp","MCHP":"Microchip Technology","MCK":"McKesson Corp","MCO":"Moody's Corp","MDLZ":"Mondelez International","MDT":"Medtronic plc","MET":"MetLife Inc.","META":"Meta Platforms","MGM":"MGM Resorts","MHK":"Mohawk Industries","MKC":"McCormick & Company","MKTX":"MarketAxess Holdings","MLM":"Martin Marietta Materials","MNST":"Monster Beverage","MO":"Altria Group","MOH":"Molina Healthcare","MOS":"Mosaic Co.","MPC":"Marathon Petroleum","MPWR":"Monolithic Power Systems","MRK":"Merck & Co.","MRNA":"Moderna Inc.","MS":"Morgan Stanley","MSCI":"MSCI Inc.","MSFT":"Microsoft Corp","MSI":"Motorola Solutions","MTB":"M&T Bank Corp","MTD":"Mettler-Toledo International","MU":"Micron Technology","NCLH":"Norwegian Cruise Line","NDAQ":"Nasdaq Inc.","NEE":"NextEra Energy","NEM":"Newmont Corp","NFLX":"Netflix Inc.","NI":"NiSource Inc.","NKE":"Nike Inc.","NOC":"Northrop Grumman","NOW":"ServiceNow Inc.","NRG":"NRG Energy","NSC":"Norfolk Southern","NTAP":"NetApp Inc.","NTRS":"Northern Trust","NUE":"Nucor Corp","NVDA":"Nvidia Corp","NVR":"NVR Inc.","NWS":"News Corp","NWSA":"News Corp Class A","NXPI":"NXP Semiconductors","O":"Realty Income Corp","ODFL":"Old Dominion Freight Line","OKE":"ONEOK Inc.","OMC":"Omnicom Group","ON":"ON Semiconductor","ORCL":"Oracle Corp","ORLY":"O'Reilly Automotive","OXY":"Occidental Petroleum","PAYC":"Paycom Software","PAYX":"Paychex Inc.","PCAR":"PACCAR Inc.","PCG":"PG&E Corp","PEG":"Public Service Enterprise","PEP":"PepsiCo Inc.","PFE":"Pfizer Inc.","PFG":"Principal Financial","PG":"Procter & Gamble","PGR":"Progressive Corp","PH":"Parker-Hannifin","PHM":"PulteGroup Inc.","PKG":"Packaging Corp","PLD":"Prologis Inc.","PM":"Philip Morris International","PNC":"PNC Financial Services","PNR":"Pentair plc","PNW":"Pinnacle West Capital","PODD":"Insulet Corp","POOL":"Pool Corp","PPG":"PPG Industries","PPL":"PPL Corp","PRU":"Prudential Financial","PSA":"Public Storage","PSX":"Phillips 66","PTC":"PTC Inc.","PWR":"Quanta Services","PYPL":"PayPal Holdings","QCOM":"Qualcomm Inc.","QRVO":"Qorvo Inc.","RCL":"Royal Caribbean Cruises","REG":"Regency Centers","REGN":"Regeneron Pharmaceuticals","RF":"Regions Financial","RJF":"Raymond James Financial","RL":"Ralph Lauren Corp","RMD":"ResMed Inc.","ROK":"Rockwell Automation","ROL":"Rollins Inc.","ROP":"Roper Technologies","ROST":"Ross Stores","RSG":"Republic Services","RTX":"RTX Corp","RVTY":"Revvity Inc.","SBAC":"SBA Communications","SBUX":"Starbucks Corp","SCHW":"Charles Schwab Corp","SJM":"J.M. Smucker Co.","SLB":"SLB (Schlumberger)","SMCI":"Super Micro Computer","SNA":"Snap-on Inc.","SNPS":"Synopsys Inc.","SO":"Southern Company","SPG":"Simon Property Group","SPGI":"S&P Global Inc.","SRE":"Sempra","STE":"STERIS plc","STLD":"Steel Dynamics","STT":"State Street Corp","STX":"Seagate Technology","STZ":"Constellation Brands","SWK":"Stanley Black & Decker","SWKS":"Skyworks Solutions","SYF":"Synchrony Financial","SYK":"Stryker Corp","SYY":"Sysco Corp","T":"AT&T Inc.","TAP":"Molson Coors Beverage","TDG":"TransDigm Group","TDY":"Teledyne Technologies","TECH":"Bio-Techne Corp","TEL":"TE Connectivity","TER":"Teradyne Inc.","TFC":"Truist Financial","TFX":"Teleflex Inc.","TGT":"Target Corp","TJX":"TJX Companies","TMO":"Thermo Fisher Scientific","TMUS":"T-Mobile US","TPR":"Tapestry Inc.","TRGP":"Targa Resources","TRMB":"Trimble Inc.","TROW":"T. Rowe Price Group","TRV":"Travelers Companies","TSCO":"Tractor Supply Co.","TSLA":"Tesla Inc.","TSN":"Tyson Foods","TT":"Trane Technologies","TTWO":"Take-Two Interactive","TXN":"Texas Instruments","TXT":"Textron Inc.","TYL":"Tyler Technologies","UAL":"United Airlines Holdings","UDR":"UDR Inc.","UHS":"Universal Health Services","ULTA":"Ulta Beauty","UNH":"UnitedHealth Group","UNP":"Union Pacific Corp","UPS":"United Parcel Service","URI":"United Rentals","USB":"U.S. Bancorp","V":"Visa Inc.","VFC":"V.F. Corp","VICI":"VICI Properties","VLO":"Valero Energy","VLTO":"Veralto Corp","VMC":"Vulcan Materials","VRSK":"Verisk Analytics","VRSN":"VeriSign Inc.","VRTX":"Vertex Pharmaceuticals","VTR":"Ventas Inc.","VTRS":"Viatris Inc.","VZ":"Verizon Communications","WAB":"Wabtec Corp","WAT":"Waters Corp","WDAY":"Workday Inc.","WBD":"Warner Bros. Discovery","WDC":"Western Digital","WELL":"Welltower Inc.","WFC":"Wells Fargo & Co.","WHR":"Whirlpool Corp","WM":"Waste Management","WMB":"Williams Companies","WMT":"Walmart Inc.","WRB":"W.R. Berkley Corp","WST":"West Pharmaceutical Services","WTW":"Willis Towers Watson","WY":"Weyerhaeuser Co.","WYNN":"Wynn Resorts","XEL":"Xcel Energy","XOM":"Exxon Mobil Corp","XYL":"Xylem Inc.","YUM":"Yum! Brands","ZBH":"Zimmer Biomet Holdings","ZBRA":"Zebra Technologies","ZTS":"Zoetis Inc.",
+  "RY.TO":"Royal Bank of Canada","TD.TO":"Toronto-Dominion Bank","BN.TO":"Brookfield Corp","ENB.TO":"Enbridge Inc.","CNR.TO":"Canadian National Railway","CP.TO":"Canadian Pacific Kansas City","BMO.TO":"Bank of Montreal","BNS.TO":"Bank of Nova Scotia","SHOP.TO":"Shopify Inc.","SU.TO":"Suncor Energy","CNQ.TO":"Canadian Natural Resources","MFC.TO":"Manulife Financial","TRP.TO":"TC Energy Corp","CM.TO":"CIBC","ATD.TO":"Alimentation Couche-Tard","WCN.TO":"Waste Connections","BAM.TO":"Brookfield Asset Management","SLF.TO":"Sun Life Financial","IFC.TO":"Intact Financial","TRI.TO":"Thomson Reuters","L.TO":"Loblaw Companies","POW.TO":"Power Corp of Canada","GWO.TO":"Great-West Lifeco","T.TO":"TELUS Corp","BCE.TO":"BCE Inc.","WPM.TO":"Wheaton Precious Metals","ABX.TO":"Barrick Gold","AEM.TO":"Agnico Eagle Mines","NTR.TO":"Nutrien Ltd.","FTS.TO":"Fortis Inc.","DOL.TO":"Dollarama Inc.","CSU.TO":"Constellation Software","QSR.TO":"Restaurant Brands Intl","H.TO":"Hydro One","GFL.TO":"GFL Environmental","WSP.TO":"WSP Global","MRU.TO":"Metro Inc.","RCI-B.TO":"Rogers Communications","IMO.TO":"Imperial Oil","FFH.TO":"Fairfax Financial"
 };
 
-// ─── STATE ────────────────────────────────────────────────────────────────────
-let running = false;
-let stopRequested = false;
-let t1Results = [];
-let t2Results = [];
-let startTime = null;
-let timerInterval = null;
-let screenedCount = 0;
-let errorCount = 0;
-let athTickers = new Set();
-
-// ─── EMA ─────────────────────────────────────────────────────────────────────
+// ─── SCREENER LOGIC ───────────────────────────────────────────────────────────
 function calcEMA(prices, period) {
   const k = 2 / (period + 1);
   const ema = new Array(prices.length);
   ema[0] = prices[0];
-  for (let i = 1; i < prices.length; i++) {
-    ema[i] = prices[i] * k + ema[i - 1] * (1 - k);
-  }
+  for (let i = 1; i < prices.length; i++) ema[i] = prices[i] * k + ema[i - 1] * (1 - k);
   return ema;
 }
 
-// ─── FIND VALID RECLAIM ───────────────────────────────────────────────────────
+function calcWeeklyEMA(ohlcv, period) {
+  const weeklyCloses = [];
+  let weekClose = null;
+  for (const d of ohlcv) {
+    const dt = new Date(d.date + 'T12:00:00Z');
+    weekClose = d.close;
+    if (dt.getDay() === 5) { weeklyCloses.push(weekClose); weekClose = null; }
+  }
+  if (weekClose !== null) weeklyCloses.push(weekClose);
+  if (weeklyCloses.length < period) return null;
+  return calcEMA(weeklyCloses, period);
+}
+
+function checkWeeklyTrend(ohlcv) {
+  const wema = calcWeeklyEMA(ohlcv, WEEKLY_EMA_PERIOD);
+  if (!wema) return true;
+  return ohlcv[ohlcv.length - 1].close > wema[wema.length - 1];
+}
+
 function findValidReclaim(c, mu, md) {
   const n = c.length;
-  let reclaimIdx = -1;
-  let belowEpStart = -1;
-
-  // Walk backwards to find the most recent reclaim crossover
   for (let i = n - 1; i >= 1; i--) {
     if (c[i] > mu[i] && c[i - 1] <= mu[i - 1]) {
-      // Found reclaim at i — look back for a below episode
       let belowIdx = -1;
       for (let j = i - 1; j >= Math.max(0, i - MAX_RECLAIM_BARS); j--) {
-        if (c[j] < md[j]) {
-          belowIdx = j;
-          break;
-        }
+        if (c[j] < md[j]) { belowIdx = j; break; }
       }
-      if (belowIdx === -1) continue; // no below episode found — try earlier reclaim
-
-      // Find start of below episode
+      if (belowIdx === -1) continue;
       let epStart = belowIdx;
       for (let k = belowIdx - 1; k >= 0; k--) {
-        if (c[k] >= mu[k]) {
-          epStart = k + 1;
-          break;
-        }
+        if (c[k] >= mu[k]) { epStart = k + 1; break; }
         if (k === 0) epStart = 0;
       }
-
-      reclaimIdx = i;
-      belowEpStart = epStart;
-      break;
+      let valid = true;
+      for (let k = i + 1; k < n; k++) { if (c[k] < md[k]) { valid = false; break; } }
+      if (!valid) continue;
+      return { reclaimIdx: i, belowEpStart: epStart };
     }
   }
-
-  if (reclaimIdx === -1) return null;
-
-  // Verify no exit after reclaim (no c[k] < md[k] for k > reclaimIdx)
-  for (let k = reclaimIdx + 1; k < n; k++) {
-    if (c[k] < md[k]) return null;
-  }
-
-  return { reclaimIdx, belowEpStart };
-}
-
-// ─── SCREEN ATH ──────────────────────────────────────────────────────────────
-function screenATH(ohlcv) {
-  const n = ohlcv.length;
-  if (n < EMA_PERIOD + 10) return null;
-
-  const closes = ohlcv.map(d => d.close);
-  const highs  = ohlcv.map(d => d.high);
-  const dates  = ohlcv.map(d => d.date);
-
-  const ema = calcEMA(closes, EMA_PERIOD);
-  const mu  = ema.map(e => e * (1 + MA_BUFFER));
-  const md  = ema.map(e => e * (1 - MA_BUFFER));
-
-  const reclaim = findValidReclaim(closes, mu, md);
-  if (!reclaim) return null;
-
-  const { reclaimIdx, belowEpStart } = reclaim;
-  const belowEpisodeBars = reclaimIdx - belowEpStart;
-  if (belowEpisodeBars > MAX_BELOW_BARS) return null;
-
-  const currentATH = Math.max(...highs);
-  const lastClose  = closes[n - 1];
-  const pctBelowATH = (currentATH - lastClose) / currentATH;
-  if (pctBelowATH > ATH_THRESHOLD) return null;
-
-  const barsSince    = n - 1 - reclaimIdx;
-  const currentEMA   = ema[n - 1];
-  const pctAboveEMA  = ((lastClose - currentEMA) / currentEMA) * 100;
-
-  return {
-    lastClose,
-    currentATH,
-    pctBelowATH,
-    pctAboveEMA,
-    barsSince,
-    belowEpisodeBars,
-    reclaimDate: dates[reclaimIdx],
-    currentEMA,
-  };
-}
-
-// ─── SCREEN SWING ────────────────────────────────────────────────────────────
-function screenSwing(ohlcv, athTickersSet) {
-  const n = ohlcv.length;
-  if (n < EMA_PERIOD + 10) return null;
-
-  const closes = ohlcv.map(d => d.close);
-  const highs  = ohlcv.map(d => d.high);
-  const dates  = ohlcv.map(d => d.date);
-
-  const ema = calcEMA(closes, EMA_PERIOD);
-  const mu  = ema.map(e => e * (1 + MA_BUFFER));
-  const md  = ema.map(e => e * (1 - MA_BUFFER));
-
-  const reclaim = findValidReclaim(closes, mu, md);
-  if (!reclaim) return null;
-
-  const { reclaimIdx, belowEpStart } = reclaim;
-  const belowEpisodeBars = reclaimIdx - belowEpStart;
-  if (belowEpisodeBars > MAX_BELOW_BARS) return null;
-
-  const currentATH  = Math.max(...highs);
-  const lastClose   = closes[n - 1];
-  const pctBelowATH = (currentATH - lastClose) / currentATH;
-
-  // Skip if in ATH zone
-  if (lastClose >= currentATH * (1 - ATH_THRESHOLD)) return null;
-
-  // ATH drawdown filter
-  if (pctBelowATH > S2_ATH_MAX_DRAWDOWN) return null;
-
-  // Swing high window
-  const winStart = n - SWING_HIGH_MAX_BARS;
-  const winEnd   = n - SWING_HIGH_MIN_BARS;
-  if (winStart < 0 || winEnd < 0 || winStart >= winEnd) return null;
-
-  const windowHighs = highs.slice(winStart, winEnd);
-  const windowDates = dates.slice(winStart, winEnd);
-  let swingHigh = -Infinity;
-  let swingIdx  = -1;
-  for (let i = 0; i < windowHighs.length; i++) {
-    if (windowHighs[i] > swingHigh) {
-      swingHigh = windowHighs[i];
-      swingIdx  = i;
-    }
-  }
-
-  if (swingHigh <= lastClose) return null;
-
-  const pctToSwing = (swingHigh - lastClose) / swingHigh;
-  if (pctToSwing < SWING_NEAR_MIN || pctToSwing > SWING_NEAR_MAX) return null;
-
-  const barsSince   = n - 1 - reclaimIdx;
-  const currentEMA  = ema[n - 1];
-  const pctAboveEMA = ((lastClose - currentEMA) / currentEMA) * 100;
-  const swingDate   = windowDates[swingIdx];
-
-  return {
-    lastClose,
-    currentATH,
-    pctBelowATH,
-    pctAboveEMA,
-    barsSince,
-    belowEpisodeBars,
-    reclaimDate: dates[reclaimIdx],
-    swingHigh,
-    swingDate,
-    pctToSwing,
-    currentEMA,
-  };
-}
-
-// ─── PROBABILITY SCORING ─────────────────────────────────────────────────────
-function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
-
-function scoreATH(pctBelowATH, pctAboveEMA, barsSince, belowBars) {
-  let prob = 88;
-  prob -= pctBelowATH * 5.5;
-  prob -= barsSince * 0.04;
-  prob += Math.min(pctAboveEMA * 0.25, 5);
-  prob -= belowBars * 0.8;
-  return clamp(prob, 40, 96);
-}
-
-function scoreSwing(pctToResistance, pctAboveEMA, barsSince, belowBars, pctBelowATH) {
-  let prob = 78;
-  prob -= pctToResistance * 6;
-  prob -= barsSince * 0.06;
-  prob += Math.min(pctAboveEMA * 0.3, 5);
-  prob -= belowBars * 0.8;
-  prob -= pctBelowATH * 1.2;
-  return clamp(prob, 35, 90);
-}
-
-// ─── FETCH OHLCV ─────────────────────────────────────────────────────────────
-async function fetchOHLCV(ticker) {
-  const yahooUrl = `https://query2.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=4y`;
-  const proxyUrl = `https://corsproxy.io/?url=${encodeURIComponent(yahooUrl)}`;
-
-  const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(15000) });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-  const json = await res.json();
-  const result = json.chart && json.chart.result && json.chart.result[0];
-  if (!result) throw new Error('No chart data');
-
-  const timestamps = result.timestamp;
-  const quote      = result.indicators.quote[0];
-  const adjClose   = (result.indicators.adjclose && result.indicators.adjclose[0] && result.indicators.adjclose[0].adjclose) || quote.close;
-
-  const data = timestamps.map((t, i) => ({
-    date:   new Date(t * 1000).toISOString().split('T')[0],
-    open:   quote.open[i],
-    high:   quote.high[i],
-    low:    quote.low[i],
-    close:  adjClose[i],
-    volume: quote.volume[i],
-  })).filter(d => d.close != null && d.high != null && d.close > 0 && d.high > 0);
-
-  return data;
-}
-
-// ─── PROCESS TICKER ──────────────────────────────────────────────────────────
-async function processTicker(ticker) {
-  const ohlcv = await fetchOHLCV(ticker);
-
-  const athResult = screenATH(ohlcv);
-  if (athResult) {
-    const prob = scoreATH(
-      athResult.pctBelowATH * 100,
-      athResult.pctAboveEMA,
-      athResult.barsSince,
-      athResult.belowEpisodeBars
-    );
-    athTickers.add(ticker);
-    return { type: 'ath', ticker, result: athResult, prob };
-  }
-
-  const swingResult = screenSwing(ohlcv, athTickers);
-  if (swingResult) {
-    const prob = scoreSwing(
-      swingResult.pctToSwing * 100,
-      swingResult.pctAboveEMA,
-      swingResult.barsSince,
-      swingResult.belowEpisodeBars,
-      swingResult.pctBelowATH * 100
-    );
-    return { type: 'swing', ticker, result: swingResult, prob };
-  }
-
   return null;
 }
 
-// ─── UI HELPERS ───────────────────────────────────────────────────────────────
-function fmt(n, dec=2) { return n.toFixed(dec); }
-function fmtPct(n) { return fmt(n) + '%'; }
-function fmtPrice(p) { return '$' + p.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}); }
-
-function probBadge(prob) {
-  const p = Math.round(prob);
-  let cls = p >= 70 ? 'prob-green' : p >= 50 ? 'prob-yellow' : 'prob-orange';
-  return `<span class="prob-badge ${cls}">${p}%</span>`;
+function checkVolumeConfirmation(ohlcv, reclaimIdx) {
+  const volumes = ohlcv.map(d => d.volume || 0);
+  const reclaimVol = volumes[reclaimIdx];
+  if (!reclaimVol) return { volumeOk: true, volRatio: 1 };
+  const window = volumes.slice(Math.max(0, reclaimIdx - 20), reclaimIdx);
+  if (!window.length) return { volumeOk: true, volRatio: 1 };
+  const avgVol = window.reduce((s, v) => s + v, 0) / window.length;
+  if (!avgVol) return { volumeOk: true, volRatio: 1 };
+  const volRatio = reclaimVol / avgVol;
+  return { volumeOk: volRatio >= VOLUME_CONFIRM_RATIO, volRatio };
 }
 
-function buildRow(item) {
-  const { ticker, result, prob, type } = item;
-  const name  = COMPANY_NAMES[ticker] || ticker;
-  const price = fmtPrice(result.lastClose);
-  const flag  = EXCHANGE_MAP[ticker] === 'TSX' ? '🇨🇦' : '🇺🇸';
-
-  let metricHTML = '';
-  if (type === 'ath') {
-    metricHTML = `
-      <li>ATH: <span class="val good">${fmtPrice(result.currentATH)}</span> &nbsp;|&nbsp; ${fmtPct(result.pctBelowATH * 100)} below ATH</li>
-      <li>EMA(220): <span class="val">${fmtPrice(result.currentEMA)}</span> &nbsp;|&nbsp; <span class="${result.pctAboveEMA >= 0 ? 'good' : 'warn'}">${fmtPct(result.pctAboveEMA)} above EMA</span></li>
-      <li>Reclaim date: <span class="val">${result.reclaimDate}</span> &nbsp;|&nbsp; ${result.barsSince} bars ago</li>
-      <li>Below-EMA episode: <span class="val">${result.belowEpisodeBars} bars</span></li>
-    `;
-  } else {
-    metricHTML = `
-      <li>Swing high: <span class="val good">${fmtPrice(result.swingHigh)}</span> on ${result.swingDate}</li>
-      <li>Distance to swing: <span class="val warn">${fmtPct(result.pctToSwing * 100)}</span></li>
-      <li>ATH: <span class="val">${fmtPrice(result.currentATH)}</span> &nbsp;|&nbsp; ${fmtPct(result.pctBelowATH * 100)} below ATH</li>
-      <li>EMA(220): <span class="val">${fmtPrice(result.currentEMA)}</span> &nbsp;|&nbsp; <span class="${result.pctAboveEMA >= 0 ? 'good' : 'warn'}">${fmtPct(result.pctAboveEMA)} above EMA</span></li>
-      <li>Reclaim date: <span class="val">${result.reclaimDate}</span> &nbsp;|&nbsp; ${result.barsSince} bars ago</li>
-      <li>Below-EMA episode: <span class="val">${result.belowEpisodeBars} bars</span></li>
-    `;
+function findWeightedSwingHigh(ohlcv) {
+  const n = ohlcv.length;
+  const winStart = n - SWING_HIGH_MAX_BARS, winEnd = n - SWING_HIGH_MIN_BARS;
+  if (winStart < 0 || winEnd < 0 || winStart >= winEnd) return null;
+  let bestWeighted = -Infinity, bestRaw = -Infinity, bestIdx = -1;
+  for (let i = winStart; i < winEnd; i++) {
+    const barsFromEnd = n - 1 - i;
+    const weight = barsFromEnd <= 126 ? 1.0 : barsFromEnd <= 252 ? 0.85 : 0.70;
+    const weighted = ohlcv[i].high * weight;
+    if (weighted > bestWeighted) { bestWeighted = weighted; bestRaw = ohlcv[i].high; bestIdx = i; }
   }
-
-  return `<tr data-prob="${Math.round(prob)}">
-    <td>
-      <div class="stock-ticker">${flag} ${ticker}</div>
-      <div class="stock-name">${name}</div>
-      <div class="stock-price">${price}</div>
-    </td>
-    <td><ul class="metrics">${metricHTML}</ul></td>
-    <td>${probBadge(prob)}</td>
-  </tr>`;
+  if (bestIdx === -1) return null;
+  return { swingHigh: bestRaw, swingDate: ohlcv[bestIdx].date };
 }
 
-function insertSorted(tbody, item) {
-  const newProb = Math.round(item.prob);
-  const newRow  = document.createElement('tbody');
-  newRow.innerHTML = buildRow(item);
-  const tr = newRow.firstElementChild;
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 
-  // Find insertion point (descending probability)
-  const rows = Array.from(tbody.querySelectorAll('tr[data-prob]'));
-  let inserted = false;
-  for (const row of rows) {
-    if (parseInt(row.dataset.prob) < newProb) {
-      tbody.insertBefore(tr, row);
-      inserted = true;
-      break;
+function scoreATH(pctBelowATH, pctAboveEMA, barsSince, belowBars, volRatio, momentum20, weeklyTrendOk) {
+  let p = 88 - pctBelowATH * 4.5 - barsSince * 0.035 + clamp(pctAboveEMA * 0.3, -5, 6) - belowBars * 0.7;
+  p += volRatio >= VOLUME_CONFIRM_RATIO ? 4 : volRatio >= 1.0 ? 2 : 0;
+  p += clamp(momentum20 * 0.3, -4, 5);
+  if (!weeklyTrendOk) p -= WEEKLY_TREND_PENALTY;
+  return clamp(Math.round(p), 40, 96);
+}
+
+function scoreSwing(pctToRes, pctAboveEMA, barsSince, belowBars, pctBelowATH, volRatio, momentum20, weeklyTrendOk) {
+  let p = 78 - pctToRes * 5.5 - barsSince * 0.05 + clamp(pctAboveEMA * 0.3, -5, 5) - belowBars * 0.7 - pctBelowATH * 1.1;
+  p += volRatio >= VOLUME_CONFIRM_RATIO ? 4 : volRatio >= 1.0 ? 2 : 0;
+  p += clamp(momentum20 * 0.3, -4, 5);
+  if (!weeklyTrendOk) p -= WEEKLY_TREND_PENALTY;
+  return clamp(Math.round(p), 35, 90);
+}
+
+// Fetch with exponential backoff + allorigins fallback
+async function fetchWithBackoff(url, maxRetries = 3) {
+  const proxies = [
+    u => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+    u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+  ];
+  let lastErr;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const proxy = attempt < 2 ? proxies[0] : proxies[1];
+    try {
+      const res = await fetch(proxy(url), { signal: AbortSignal.timeout(15000) });
+      if (res.status === 429) { await new Promise(r => setTimeout(r, Math.pow(2, attempt) * 1000)); lastErr = new Error('429'); continue; }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.json();
+    } catch (e) {
+      lastErr = e;
+      if (attempt < maxRetries - 1) await new Promise(r => setTimeout(r, Math.pow(2, attempt) * 600));
     }
   }
-  if (!inserted) tbody.appendChild(tr);
+  throw lastErr;
 }
 
-function updateStats() {
-  document.getElementById('screenedCount').textContent = screenedCount;
-  document.getElementById('totalCount').textContent = TICKERS.length;
-  document.getElementById('t1Count').textContent = t1Results.length;
-  document.getElementById('t2Count').textContent = t2Results.length;
-  document.getElementById('errorCount').textContent = errorCount;
-  document.getElementById('t1Badge').textContent = t1Results.length;
-  document.getElementById('t2Badge').textContent = t2Results.length;
+async function fetchOHLCV(ticker) {
+  const url = `https://query2.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=5y`;
+  const json = await fetchWithBackoff(url);
+  const result = json.chart?.result?.[0];
+  if (!result) throw new Error('No data');
+  const ts = result.timestamp, q = result.indicators.quote[0];
+  const ac = result.indicators.adjclose?.[0]?.adjclose || q.close;
+  return ts.map((t, i) => ({
+    date: new Date(t * 1000).toISOString().split('T')[0],
+    high: q.high[i], low: q.low[i], close: ac[i], volume: q.volume[i]
+  })).filter(d => d.close != null && d.high != null && d.close > 0);
 }
 
-function updateProgress(idx, ticker) {
-  const pct = Math.round((idx / TICKERS.length) * 100);
-  document.getElementById('progressFill').style.width = pct + '%';
-  document.getElementById('progressPct').textContent = pct + '%';
-  document.getElementById('currentTicker').textContent = ticker || '—';
+async function fetchLatestPrice(ticker) {
+  const url = `https://query2.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=5d`;
+  const json = await fetchWithBackoff(url);
+  const result = json.chart?.result?.[0];
+  const closes = result?.indicators?.adjclose?.[0]?.adjclose || result?.indicators?.quote?.[0]?.close;
+  if (!closes) return null;
+  for (let i = closes.length - 1; i >= 0; i--) { if (closes[i] != null) return closes[i]; }
+  return null;
 }
 
-// ─── MAIN LOOP ────────────────────────────────────────────────────────────────
-async function startScreen() {
-  if (running) return;
-  running      = true;
-  stopRequested = false;
-  t1Results    = [];
-  t2Results    = [];
-  screenedCount = 0;
-  errorCount   = 0;
-  athTickers   = new Set();
+// CAD/USD rate cache (Change 6)
+let cadUsdRate = null;
+async function fetchCadUsd() {
+  if (cadUsdRate) return cadUsdRate;
+  try {
+    const p = await fetchLatestPrice('CADUSD=X');
+    if (p) { cadUsdRate = p; document.getElementById('cadUsdDisplay').textContent = p.toFixed(4); }
+  } catch {}
+  return cadUsdRate || 0.74; // fallback
+}
 
-  // Reset UI
-  document.getElementById('runBtn').disabled = true;
-  document.getElementById('stopBtn').style.display = 'inline-block';
-  document.getElementById('progressWrap').style.display = 'block';
-  document.getElementById('t1Body').innerHTML = '';
-  document.getElementById('t2Body').innerHTML = '';
-  updateStats();
-  updateProgress(0, '');
+function toUSD(priceCAD) {
+  return priceCAD * (cadUsdRate || 0.74);
+}
 
-  startTime = Date.now();
-  timerInterval = setInterval(() => {
-    const s = Math.round((Date.now() - startTime) / 1000);
-    document.getElementById('elapsedTime').textContent = s < 60 ? s + 's' : Math.floor(s/60) + 'm ' + (s%60) + 's';
-  }, 1000);
+function runScreenOnOHLCV(ticker, ohlcv) {
+  const n = ohlcv.length;
+  if (n < EMA_PERIOD + 10) return null;
+  const closes = ohlcv.map(d => d.close);
+  const highs  = ohlcv.map(d => d.high);
+  const dates  = ohlcv.map(d => d.date);
+  const ema = calcEMA(closes, EMA_PERIOD);
+  const mu  = ema.map(e => e * (1 + MA_BUFFER));
+  const md  = ema.map(e => e * (1 - MA_BUFFER));
+  const rec = findValidReclaim(closes, mu, md);
+  if (!rec) return null;
+  const { reclaimIdx, belowEpStart } = rec;
+  const belowEpisodeBars = reclaimIdx - belowEpStart;
+  if (belowEpisodeBars > MAX_BELOW_BARS) return null;
+  const lastClose   = closes[n - 1];
+  const reclaimClose = closes[reclaimIdx]; // for entry timing (Change 5)
+  const currentATH  = Math.max(...highs);
+  const pctBelowATH = (currentATH - lastClose) / currentATH;
+  const currentEMA  = ema[n - 1];
+  const pctAboveEMA = (lastClose - currentEMA) / currentEMA * 100;
+  const barsSince   = n - 1 - reclaimIdx;
+  const { volumeOk, volRatio } = checkVolumeConfirmation(ohlcv, reclaimIdx);
+  const weeklyTrendOk = checkWeeklyTrend(ohlcv);
+  const momentum20 = n > 20 ? (closes[n-1] - closes[n-21]) / closes[n-21] * 100 : 0;
 
-  const BATCH = 5;
+  if (pctBelowATH <= ATH_THRESHOLD) {
+    const prob = scoreATH(pctBelowATH * 100, pctAboveEMA, barsSince, belowEpisodeBars, volRatio, momentum20, weeklyTrendOk);
+    return { type: 'ath', prob: Math.round(prob), lastClose, reclaimClose, reclaimDate: dates[reclaimIdx] };
+  }
+  if (pctBelowATH <= S2_ATH_MAX_DRAWDOWN) {
+    if (lastClose >= currentATH * (1 - ATH_THRESHOLD)) return null;
+    const swing = findWeightedSwingHigh(ohlcv);
+    if (!swing) return null;
+    const pctToSwing = (swing.swingHigh - lastClose) / swing.swingHigh;
+    if (pctToSwing < SWING_NEAR_MIN || pctToSwing > SWING_NEAR_MAX) return null;
+    const prob = scoreSwing(pctToSwing * 100, pctAboveEMA, barsSince, belowEpisodeBars, pctBelowATH * 100, volRatio, momentum20, weeklyTrendOk);
+    return { type: 'swing', prob: Math.round(prob), lastClose, reclaimClose, reclaimDate: dates[reclaimIdx] };
+  }
+  return null;
+}
 
-  for (let i = 0; i < TICKERS.length && !stopRequested; i += BATCH) {
-    const batch = TICKERS.slice(i, i + BATCH);
-    updateProgress(i, batch[0]);
+// ─── STATE MANAGEMENT ─────────────────────────────────────────────────────────
+const STORAGE_KEY = 'ema_tracker_v3';
 
-    const promises = batch.map(async (ticker) => {
-      if (stopRequested) return;
-      try {
-        const item = await processTicker(ticker);
-        screenedCount++;
-        if (item) {
-          if (item.type === 'ath') {
-            t1Results.push(item);
-            insertSorted(document.getElementById('t1Body'), item);
-          } else {
-            t2Results.push(item);
-            insertSorted(document.getElementById('t2Body'), item);
-          }
-        }
-        updateStats();
-        updateProgress(screenedCount, ticker);
-      } catch (e) {
-        screenedCount++;
-        errorCount++;
-        updateStats();
+function defaultState() {
+  return {
+    trades: [], pendingEntries: [], screenerRuns: [], notes: [],
+    totalCapital: TOTAL_CAPITAL,
+    autoTradePaused: false,
+    autoTradePauseUntil: null,
+    ruleVersion: RULE_VERSION,
+  };
+}
+
+// Migrate from older versions
+function migrate() {
+  try {
+    // v2 → v3
+    const rawV2 = localStorage.getItem('ema_tracker_v2');
+    if (rawV2) {
+      const v2 = JSON.parse(rawV2);
+      if (v2) {
+        v2.pendingEntries = v2.pendingEntries || [];
+        v2.autoTradePaused = false;
+        v2.autoTradePauseUntil = null;
+        v2.ruleVersion = RULE_VERSION;
+        return v2;
       }
+    }
+    // v1 → v3
+    const rawV1 = localStorage.getItem('ema_tracker_v1');
+    if (rawV1) {
+      const v1 = JSON.parse(rawV1);
+      if (v1) {
+        v1.trades = (v1.trades || []).map(t => ({
+          ...t,
+          sharesTotal: t.shares, sharesOpen: t.shares,
+          partialExitDone: false, partialExitPrice: null, partialExitDate: null,
+          partialExitTime: null, partialExitPnl: null,
+          partialTarget: +(t.buyPrice * 1.03).toFixed(4),
+          finalTarget:   +(t.buyPrice * 1.05).toFixed(4),
+          highestPrice: t.currentPrice || t.buyPrice,
+          trailingStop: +((t.currentPrice || t.buyPrice) * 0.98).toFixed(4),
+        }));
+        v1.pendingEntries = [];
+        v1.autoTradePaused = false;
+        v1.autoTradePauseUntil = null;
+        v1.ruleVersion = RULE_VERSION;
+        return v1;
+      }
+    }
+  } catch {}
+  return null;
+}
+
+let STATE = (() => {
+  try {
+    const v3 = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    if (v3) return v3;
+    return migrate() || defaultState();
+  } catch { return defaultState(); }
+})();
+
+function saveState() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(STATE)); } catch {}
+  if (FIREBASE_ENABLED && window._fbDb) {
+    // Firebase-first: window._fbDb.ref('tracker').set(STATE);
+  }
+}
+
+// ─── TIME HELPERS ─────────────────────────────────────────────────────────────
+function nowET() { return new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })); }
+function todayET() { const et = nowET(); return `${et.getFullYear()}-${String(et.getMonth()+1).padStart(2,'0')}-${String(et.getDate()).padStart(2,'0')}`; }
+function timeET() { const et = nowET(); return `${String(et.getHours()).padStart(2,'0')}:${String(et.getMinutes()).padStart(2,'0')}`; }
+function isWeekdayET() { const d = nowET().getDay(); return d >= 1 && d <= 5; }
+function isMarketOpen() {
+  if (!isWeekdayET()) return false;
+  const today = todayET();
+  if (NYSE_HOLIDAYS.has(today)) return false;
+  const et = nowET(), mins = et.getHours() * 60 + et.getMinutes();
+  return mins >= 570 && mins < 960;
+}
+function isTSXOpen() {
+  if (!isWeekdayET()) return false;
+  const today = todayET();
+  if (TSX_HOLIDAYS.has(today)) return false;
+  const et = nowET(), mins = et.getHours() * 60 + et.getMinutes();
+  return mins >= 570 && mins < 960;
+}
+function shouldSkipTodayUS()  { return NYSE_HOLIDAYS.has(todayET()); }
+function shouldSkipTodayTSX() { return TSX_HOLIDAYS.has(todayET()); }
+
+// ─── CAD/USD + CAPITAL ────────────────────────────────────────────────────────
+function toUSDprice(price, ticker) {
+  if (EXCHANGE_MAP[ticker] === 'TSX') return price * (cadUsdRate || 0.74);
+  return price;
+}
+
+function deployedCapital() {
+  return STATE.trades
+    .filter(t => t.status === 'live' || t.status === 'partial')
+    .reduce((s, t) => s + (t.partialExitDone ? t.invested / 2 : t.invested), 0);
+}
+function availableCapital() { return STATE.totalCapital - deployedCapital(); }
+function realizedPnL() {
+  let total = 0;
+  for (const t of STATE.trades) {
+    if (t.status !== 'live' && t.status !== 'partial') total += t.pnl || 0;
+    else if (t.partialExitDone && t.partialExitPnl != null) total += t.partialExitPnl;
+  }
+  return total;
+}
+function unrealizedPnL() {
+  let total = 0;
+  for (const t of STATE.trades.filter(x => x.status === 'live' || x.status === 'partial')) {
+    const cp = t.currentPrice || t.buyPrice;
+    const openPnl = (cp - t.buyPrice) * (t.sharesOpen || t.sharesTotal || 0);
+    total += openPnl;
+  }
+  return total;
+}
+
+// ─── REGIME CACHE ─────────────────────────────────────────────────────────────
+let regimeCache = null;
+async function checkRegime() {
+  if (regimeCache) return regimeCache;
+  const r = { spyAbove: true, xiuAbove: true };
+  try { const d = await fetchOHLCV('SPY'); if (d.length >= EMA_PERIOD) { const c = d.map(x=>x.close), ema = calcEMA(c, EMA_PERIOD); r.spyAbove = c[c.length-1] > ema[ema.length-1]; } } catch {}
+  try { const d = await fetchOHLCV('XIU.TO'); if (d.length >= EMA_PERIOD) { const c = d.map(x=>x.close), ema = calcEMA(c, EMA_PERIOD); r.xiuAbove = c[c.length-1] > ema[ema.length-1]; } } catch {}
+  regimeCache = r;
+  updateRegimeBanner(r);
+  return r;
+}
+function updateRegimeBanner(r) {
+  const b = document.getElementById('regimeBanner'), d = document.getElementById('regimeCautionDetail');
+  const t = document.getElementById('regimeTag');
+  if (!r.spyAbove && !r.xiuAbove) {
+    b.style.display = 'flex'; d.textContent = 'Both SPY & XIU.TO below 220 EMA — all auto-entries suppressed.';
+    if (t) t.textContent = '⚠ Both Regime Caution';
+  } else if (!r.spyAbove) {
+    b.style.display = 'flex'; d.textContent = 'SPY below 220 EMA — US auto-entries suppressed.';
+    if (t) t.textContent = '⚠ US Regime Caution';
+  } else if (!r.xiuAbove) {
+    b.style.display = 'flex'; d.textContent = 'XIU.TO below 220 EMA — CA auto-entries suppressed.';
+    if (t) t.textContent = '⚠ CA Regime Caution';
+  } else {
+    b.style.display = 'none';
+    if (t) t.textContent = '';
+  }
+}
+
+// ─── TRADE LOGIC ─────────────────────────────────────────────────────────────
+function isAlreadyHolding(ticker) {
+  return STATE.trades.some(t => t.ticker === ticker && (t.status === 'live' || t.status === 'partial'));
+}
+function isAlreadyPending(ticker) {
+  return STATE.pendingEntries.some(p => p.ticker === ticker);
+}
+function isInCooldown(ticker) {
+  // 48h cooldown after stop loss (Change 7)
+  const now = Date.now();
+  return STATE.trades.some(t => {
+    if (t.ticker !== ticker || t.exitReason !== 'loss') return false;
+    if (!t.sellDate || !t.sellTime) return false;
+    const sellMs = new Date(`${t.sellDate}T${t.sellTime}:00`).getTime();
+    return (now - sellMs) < COOLDOWN_MS;
+  });
+}
+function isAutoTradePaused() {
+  if (!STATE.autoTradePaused) return false;
+  if (STATE.autoTradePauseUntil && Date.now() > STATE.autoTradePauseUntil) {
+    STATE.autoTradePaused = false; STATE.autoTradePauseUntil = null; saveState();
+    return false;
+  }
+  return true;
+}
+
+// Check for double-stop within 7 days (Change 7) and auto-pause
+function checkDoubleStop() {
+  const now = Date.now();
+  const recentLosses = STATE.trades.filter(t => {
+    if (t.exitReason !== 'loss' || !t.sellDate || !t.sellTime) return false;
+    const sellMs = new Date(`${t.sellDate}T${t.sellTime}:00`).getTime();
+    return (now - sellMs) < DOUBLE_STOP_WINDOW_MS;
+  });
+  if (recentLosses.length >= 2 && !STATE.autoTradePaused) {
+    STATE.autoTradePaused = true;
+    STATE.autoTradePauseUntil = now + DOUBLE_STOP_PAUSE_MS;
+    saveState();
+    notify('⏸ Auto-Trade Paused: 2 stop losses in 7 days. Resumes in 1 week.');
+    // Add Rule Change Exit note
+    STATE.notes.unshift({ ticker: 'System', signalType: 'General', outcome: 'Rule Change Exit',
+      text: `Auto-trade paused: 2 stop losses within 7 days (${recentLosses.map(t=>t.ticker).join(', ')}). Resumes ${new Date(STATE.autoTradePauseUntil).toLocaleDateString()}.`,
+      ts: todayET(), stopTriggerTs: todayET() });
+  }
+  updatePauseBanner();
+}
+
+function updatePauseBanner() {
+  const b = document.getElementById('pauseBanner'), r = document.getElementById('pauseResumeDate');
+  if (STATE.autoTradePaused && STATE.autoTradePauseUntil) {
+    b.style.display = 'flex';
+    r.textContent = new Date(STATE.autoTradePauseUntil).toLocaleDateString();
+  } else {
+    b.style.display = 'none';
+  }
+}
+
+// Create pending entry (entry timing: wait for next-session confirmation) (Change 5)
+function createPendingEntry(ticker, type, prob, reclaimClose, runTime) {
+  if (isAlreadyHolding(ticker) || isAlreadyPending(ticker) || isInCooldown(ticker)) return null;
+  if (availableCapital() < TRADE_SIZE) return null;
+  if (isAutoTradePaused()) return null;
+  STATE.pendingEntries.push({
+    id: `p_${Date.now()}_${Math.random().toString(36).slice(2,5)}`,
+    ticker, type, prob, reclaimClose, runTime,
+    signalDate: todayET(), exchange: EXCHANGE_MAP[ticker] || 'US',
+  });
+  return true;
+}
+
+// Confirm pending entries: if today's close > reclaimClose → create trade
+async function confirmPendingEntries() {
+  if (!STATE.pendingEntries.length) return;
+  let changed = false;
+  const toRemove = [];
+  for (const p of STATE.pendingEntries) {
+    try {
+      const price = await fetchLatestPrice(p.ticker);
+      if (!price) continue;
+      // Confirm: price still above reclaim close
+      if (price > p.reclaimClose) {
+        const priceUSD = EXCHANGE_MAP[p.ticker] === 'TSX' ? toUSD(price) : price;
+        const trade = createTrade(p.ticker, p.type, p.prob, priceUSD, p.runTime);
+        if (trade) {
+          notify(`✅ Entry confirmed: ${p.ticker} at $${priceUSD.toFixed(2)} USD (next-session close above reclaim)`);
+          changed = true;
+        }
+        toRemove.push(p.id);
+      }
+      // If signal is more than 2 sessions old, cancel
+      const signalAge = (Date.now() - new Date(p.signalDate).getTime()) / (24*60*60*1000);
+      if (signalAge > 2) { toRemove.push(p.id); changed = true; }
+    } catch {}
+  }
+  STATE.pendingEntries = STATE.pendingEntries.filter(p => !toRemove.includes(p.id));
+  if (changed) { saveState(); renderAll(); }
+}
+
+function createTrade(ticker, type, prob, priceUSD, runTime) {
+  if (isAlreadyHolding(ticker)) return null;
+  if (isInCooldown(ticker)) return null;
+  if (availableCapital() < TRADE_SIZE) return null;
+  if (isAutoTradePaused()) return null;
+  const shares = TRADE_SIZE / priceUSD;
+  const trade = {
+    id: `t_${Date.now()}_${Math.random().toString(36).slice(2,5)}`,
+    ticker, exchange: EXCHANGE_MAP[ticker] || 'US', type, prob,
+    screenerRunDate: todayET(), screenerRunTime: runTime,
+    status: 'live',
+    buyDate: todayET(), buyTime: timeET(),
+    buyPrice: +priceUSD.toFixed(4),
+    sharesTotal: +shares.toFixed(6), sharesOpen: +shares.toFixed(6),
+    invested: TRADE_SIZE,
+    partialExitDone: false, partialExitPrice: null,
+    partialExitDate: null, partialExitTime: null, partialExitPnl: null,
+    partialTarget: +(priceUSD * (1 + PARTIAL_TARGET)).toFixed(4),
+    finalTarget:   +(priceUSD * (1 + PROFIT_TARGET)).toFixed(4),
+    highestPrice:  +priceUSD.toFixed(4),
+    trailingStop:  +(priceUSD * (1 - STOP_LOSS)).toFixed(4),
+    currentPrice:  +priceUSD.toFixed(4),
+    pnl: null, pnlPct: null, sellDate: null, sellTime: null, sellPrice: null, exitReason: null,
+    ruleVersion: RULE_VERSION,
+  };
+  STATE.trades.push(trade);
+  return trade;
+}
+
+function closeTrade(trade, price, reason) {
+  trade.status     = reason === 'profit' ? 'sold_profit' : reason === 'loss' ? 'sold_loss' : 'closed_manual';
+  trade.sellDate   = todayET(); trade.sellTime = timeET();
+  trade.sellPrice  = +price.toFixed(4);
+  trade.exitReason = reason;
+  trade.currentPrice = +price.toFixed(4);
+  const remainderPnl = (price - trade.buyPrice) * (trade.sharesOpen || trade.sharesTotal);
+  const partialPnl   = trade.partialExitPnl || 0;
+  trade.pnl    = +(partialPnl + remainderPnl).toFixed(2);
+  trade.pnlPct = +(trade.pnl / trade.invested * 100).toFixed(2);
+  // Check for double-stop after loss
+  if (reason === 'loss') checkDoubleStop();
+}
+
+function manualClose(tradeId) {
+  const t = STATE.trades.find(x => x.id === tradeId);
+  if (!t || (t.status !== 'live' && t.status !== 'partial')) return;
+  const price = t.currentPrice || t.buyPrice;
+  closeTrade(t, price, 'manual');
+  saveState(); renderAll();
+  notify(`Manually closed ${t.ticker} at $${price.toFixed(2)}`);
+}
+
+function cancelPending(id) {
+  STATE.pendingEntries = STATE.pendingEntries.filter(p => p.id !== id);
+  saveState(); renderAll();
+}
+
+// ─── RULE VERSIONING (Change 15) ─────────────────────────────────────────────
+function checkRuleVersion() {
+  if (!STATE.ruleVersion || STATE.ruleVersion !== RULE_VERSION) {
+    // Auto-revalidate open positions
+    const openTrades = STATE.trades.filter(t => t.status === 'live' || t.status === 'partial');
+    for (const t of openTrades) {
+      if (t.ruleVersion && t.ruleVersion !== RULE_VERSION) {
+        // Mark for review (don't auto-sell — just flag)
+        t.ruleVersionMismatch = true;
+      }
+    }
+    STATE.ruleVersion = RULE_VERSION;
+    saveState();
+    document.getElementById('ruleBanner').style.display = 'flex';
+  }
+  document.getElementById('ruleVersionLabel').textContent = RULE_VERSION;
+}
+
+// ─── POSITION MONITOR ─────────────────────────────────────────────────────────
+let monitorBusy = false;
+async function monitorPositions() {
+  if (monitorBusy || !isMarketOpen()) return;
+  const live = STATE.trades.filter(t => t.status === 'live' || t.status === 'partial');
+  if (!live.length) return;
+  monitorBusy = true;
+  let changed = false;
+  try {
+    // Refresh CAD/USD first
+    await fetchCadUsd();
+    for (const trade of live) {
+      try {
+        let price = await fetchLatestPrice(trade.ticker);
+        if (price == null) continue;
+        // Convert TSX to USD
+        if (trade.exchange === 'TSX') price = toUSD(price);
+        trade.currentPrice = price;
+
+        if (price > (trade.highestPrice || trade.buyPrice)) {
+          trade.highestPrice = price;
+          const rawStop = price * (1 - STOP_LOSS);
+          const floor = trade.partialExitDone ? trade.buyPrice : 0;
+          trade.trailingStop = +(Math.max(rawStop, floor)).toFixed(4);
+        }
+
+        const chgFromBuy = (price - trade.buyPrice) / trade.buyPrice * 100;
+
+        if (!trade.partialExitDone && chgFromBuy >= PARTIAL_TARGET * 100) {
+          const halfShares = trade.sharesTotal / 2;
+          trade.partialExitDone  = true;
+          trade.partialExitPrice = +price.toFixed(4);
+          trade.partialExitDate  = todayET();
+          trade.partialExitTime  = timeET();
+          trade.partialExitPnl   = +((price - trade.buyPrice) * halfShares).toFixed(2);
+          trade.sharesOpen       = halfShares;
+          trade.status           = 'partial';
+          trade.trailingStop     = Math.max(trade.trailingStop, trade.buyPrice);
+          notify(`⚡ Partial: ${trade.ticker} +${chgFromBuy.toFixed(2)}% — sold 50% @ $${price.toFixed(2)} (+$${trade.partialExitPnl.toFixed(2)}) · Stop → breakeven`);
+          changed = true;
+        }
+
+        if (price <= trade.trailingStop) {
+          const wasPartial = trade.partialExitDone;
+          closeTrade(trade, price, 'loss');
+          const tp = trade.pnl >= 0 ? '+$' + trade.pnl.toFixed(2) : '-$' + Math.abs(trade.pnl).toFixed(2);
+          notify(`🛑 Stop: ${trade.ticker} @ $${price.toFixed(2)} · Total P&L ${tp}${wasPartial ? ' (partial gains kept)' : ''}`);
+          changed = true;
+        } else if (chgFromBuy >= PROFIT_TARGET * 100) {
+          closeTrade(trade, price, 'profit');
+          notify(`✅ Profit: ${trade.ticker} +${chgFromBuy.toFixed(2)}% · P&L ${trade.pnl >= 0 ? '+$' : '-$'}${Math.abs(trade.pnl).toFixed(2)}`);
+          changed = true;
+        } else { changed = true; }
+      } catch {}
+    }
+    if (changed) { saveState(); renderAll(); }
+  } finally { monitorBusy = false; }
+}
+
+// ─── SCREENER RUNNER ──────────────────────────────────────────────────────────
+const SCHED_TIMES = ['08:00', '13:00'];
+let screenerRunning = false, screenerStop = false;
+
+function hasRunToday(t) { return STATE.screenerRuns.some(r => r.date === todayET() && r.time === t); }
+
+function checkSchedule() {
+  if (!isWeekdayET()) return;
+  if (shouldSkipTodayUS() && shouldSkipTodayTSX()) return; // both markets holiday
+  const et = timeET();
+  for (const t of SCHED_TIMES) {
+    if (et >= t && !hasRunToday(t)) { runScreener(t); return; }
+  }
+}
+
+async function runScreenerNow() { regimeCache = null; await runScreener(null); }
+function stopScreenerRun() { screenerStop = true; }
+
+async function runScreener(scheduledTime) {
+  if (screenerRunning) return;
+  screenerRunning = true; screenerStop = false;
+  const runTime = scheduledTime || timeET().slice(0, 5);
+
+  // Fetch CAD/USD rate first
+  await fetchCadUsd();
+
+  // Regime check
+  const regime = await checkRegime();
+
+  let athCount = 0, swingCount = 0, tradedCount = 0, pendingCount = 0, skippedCount = 0, screened = 0;
+
+  document.getElementById('screenerProgressWrap').style.display = 'block';
+  document.getElementById('runNowBtn').disabled = true;
+  document.getElementById('stopBtn').style.display = 'inline-block';
+
+  // Determine which tickers to run based on market calendar
+  const skipUS  = shouldSkipTodayUS();
+  const skipTSX = shouldSkipTodayTSX();
+  let tickersToRun = TICKERS;
+  if (skipUS && !skipTSX) tickersToRun = TSX_TICKERS;
+  else if (!skipUS && skipTSX) tickersToRun = SP500_TICKERS;
+
+  try {
+    const BATCH = 4;
+    for (let i = 0; i < tickersToRun.length && !screenerStop; i += BATCH) {
+      const batch = tickersToRun.slice(i, i + BATCH);
+      const pct = Math.round(i / tickersToRun.length * 100);
+      document.getElementById('screenerFill').style.width = pct + '%';
+      document.getElementById('screenerPct').textContent = pct + '%';
+      document.getElementById('screenerTicker').textContent = batch[0];
+
+      await Promise.all(batch.map(async (ticker) => {
+        if (screenerStop) return;
+        try {
+          const ohlcv = await fetchOHLCV(ticker);
+          screened++;
+          const res = runScreenOnOHLCV(ticker, ohlcv);
+          if (!res) return;
+
+          const threshold = res.type === 'ath' ? ATH_PROB_THRESHOLD : SWING_PROB_THRESHOLD;
+          if (res.prob < threshold) return;
+          if (res.type === 'ath') athCount++; else swingCount++;
+
+          // Regime suppression check
+          const exchange = EXCHANGE_MAP[ticker] || 'US';
+          const regimeOk = (exchange === 'US' ? regime.spyAbove : regime.xiuAbove);
+          if (!regimeOk) { skippedCount++; return; }
+
+          if (isAutoTradePaused()) { skippedCount++; return; }
+
+          // Price in USD
+          let priceUSD = res.lastClose;
+          if (exchange === 'TSX') priceUSD = toUSD(res.lastClose);
+
+          // Change 5: queue as pending entry (next-session confirmation)
+          const added = createPendingEntry(ticker, res.type, res.prob, res.reclaimClose, runTime);
+          if (added) pendingCount++; else skippedCount++;
+        } catch {}
+      }));
+
+      await new Promise(r => setTimeout(r, 250));
+    }
+
+    STATE.screenerRuns.push({
+      date: todayET(), time: runTime,
+      athCount, swingCount, tradedCount, pendingCount, skippedCount, totalScreened: screened,
+      regimeUS: regime.spyAbove ? '✓' : '⚠', regimeTSX: regime.xiuAbove ? '✓' : '⚠',
     });
-
-    await Promise.all(promises);
-
-    if (!stopRequested && i + BATCH < TICKERS.length) {
-      await new Promise(r => setTimeout(r, 300));
-    }
-  }
-
-  // Show empty states if no results
-  if (t1Results.length === 0) {
-    document.getElementById('t1Body').innerHTML = `<tr><td colspan="3"><div class="empty-state"><p>No stocks matched the ATH criteria</p></div></td></tr>`;
-  }
-  if (t2Results.length === 0) {
-    document.getElementById('t2Body').innerHTML = `<tr><td colspan="3"><div class="empty-state"><p>No stocks matched the Swing criteria</p></div></td></tr>`;
-  }
-
-  // Done
-  running = false;
-  clearInterval(timerInterval);
-  updateProgress(TICKERS.length, '');
-  document.getElementById('progressFill').style.width = '100%';
-  document.getElementById('progressPct').textContent = '100%';
-  document.getElementById('currentTicker').textContent = stopRequested ? 'Stopped' : 'Done';
-  document.getElementById('runBtn').disabled = false;
-  document.getElementById('stopBtn').style.display = 'none';
-}
-
-function stopScreen() {
-  stopRequested = true;
-  document.getElementById('stopBtn').disabled = true;
-  document.getElementById('stopBtn').textContent = 'Stopping…';
-  setTimeout(() => {
+    saveState(); renderAll();
+    notify(`Screener done (${runTime} ET): ${athCount} ATH · ${swingCount} Swing · ${pendingCount} pending · ${skippedCount} skipped`);
+  } finally {
+    screenerRunning = false; screenerStop = false;
+    document.getElementById('screenerProgressWrap').style.display = 'none';
+    document.getElementById('screenerFill').style.width = '0%';
+    document.getElementById('runNowBtn').disabled = false;
     document.getElementById('stopBtn').style.display = 'none';
-    document.getElementById('stopBtn').disabled = false;
-    document.getElementById('stopBtn').textContent = '■ Stop';
-    document.getElementById('runBtn').disabled = false;
-    running = false;
-    clearInterval(timerInterval);
-  }, 2000);
-}
-
-// ─── EXPORT CSV ───────────────────────────────────────────────────────────────
-function exportCSV(type) {
-  const results = type === 'ath' ? t1Results : t2Results;
-  if (!results.length) { alert('No results to export.'); return; }
-
-  let csv = 'Ticker,Company,Price,Prob%,ATH,PctBelowATH%,EMA220,PctAboveEMA%,BarsSince,BelowBars,ReclaimDate';
-  if (type === 'swing') csv += ',SwingHigh,SwingDate,PctToSwing%';
-  csv += '\n';
-
-  for (const item of results) {
-    const r = item.result;
-    const name = (COMPANY_NAMES[item.ticker] || '').replace(/,/g, ';');
-    let row = [
-      item.ticker, name,
-      r.lastClose.toFixed(2),
-      Math.round(item.prob),
-      r.currentATH.toFixed(2),
-      (r.pctBelowATH * 100).toFixed(2),
-      r.currentEMA.toFixed(2),
-      r.pctAboveEMA.toFixed(2),
-      r.barsSince,
-      r.belowEpisodeBars,
-      r.reclaimDate,
-    ];
-    if (type === 'swing') {
-      row.push(r.swingHigh.toFixed(2), r.swingDate, (r.pctToSwing * 100).toFixed(2));
-    }
-    csv += row.join(',') + '\n';
   }
-
-  const blob = new Blob([csv], { type: 'text/csv' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href     = url;
-  a.download = `screener_${type}_${new Date().toISOString().split('T')[0]}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
 }
 
-// ─── MINIMIZE / RESTORE PANELS ───────────────────────────────────────────────
-function togglePanel(id) {
-  const wrap   = document.getElementById(id + 'Wrap');
-  const btn    = document.getElementById(id + 'MinBtn');
-  const hidden = wrap.classList.toggle('minimized');
-  btn.textContent = hidden ? '+' : '−';
-  btn.title       = hidden ? 'Restore' : 'Minimize';
+// ─── NOTES ────────────────────────────────────────────────────────────────────
+function addNote() {
+  const text       = document.getElementById('noteInput').value.trim();
+  const ticker     = (document.getElementById('noteTicker').value.trim().toUpperCase() || 'General');
+  const signalType = document.getElementById('noteSignalType').value;
+  const outcome    = document.getElementById('noteOutcome').value;
+  const stopTs     = document.getElementById('noteStopTs').value || todayET();
+  if (!text) return;
+  STATE.notes.push({ ticker, signalType, outcome, text, ts: todayET(), stopTriggerTs: stopTs });
+  document.getElementById('noteInput').value = '';
+  document.getElementById('noteTicker').value = '';
+  document.getElementById('noteOutcome').value = '';
+  saveState(); renderNotes();
 }
+
+function deleteNote(i) { STATE.notes.splice(i, 1); saveState(); renderNotes(); }
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ─── RENDER ───────────────────────────────────────────────────────────────────
+function renderAll() {
+  renderCapitalBar();
+  renderCards();
+  renderPending();
+  renderLive();
+  renderClosed();
+  renderRunLog();
+  renderScheduleInfo();
+  updatePauseBanner();
+}
+
+function renderCapitalBar() {
+  const deployed = deployedCapital();
+  const pnl = realizedPnL();
+  const unreal = unrealizedPnL();
+  document.getElementById('deployedCap').textContent = '$' + deployed.toFixed(2);
+  document.getElementById('availCap').textContent    = '$' + availableCapital().toFixed(2);
+  const pnlEl = document.getElementById('totalPnl');
+  pnlEl.textContent = (pnl >= 0 ? '+$' : '-$') + Math.abs(pnl).toFixed(2);
+  pnlEl.className   = pnl > 0 ? 'positive' : pnl < 0 ? 'negative' : 'neutral';
+  const urEl = document.getElementById('unrealPnl');
+  urEl.textContent  = (unreal >= 0 ? '+$' : '-$') + Math.abs(unreal).toFixed(2);
+  urEl.className    = unreal > 0 ? 'positive' : unreal < 0 ? 'negative' : 'neutral';
+  if (cadUsdRate) document.getElementById('cadUsdDisplay').textContent = cadUsdRate.toFixed(4);
+}
+
+function renderCards() {
+  const live    = STATE.trades.filter(t => t.status === 'live' || t.status === 'partial').length;
+  const profits = STATE.trades.filter(t => t.exitReason === 'profit').length;
+  const losses  = STATE.trades.filter(t => t.exitReason === 'loss').length;
+  const total   = profits + losses;
+  const wr      = total > 0 ? Math.round(profits / total * 100) + '%' : '—';
+  document.getElementById('openCount').textContent       = live + (STATE.pendingEntries.length ? ` (+${STATE.pendingEntries.length}⏳)` : '');
+  document.getElementById('profitCount').textContent     = profits;
+  document.getElementById('lossCount').textContent       = losses;
+  document.getElementById('winRate').textContent         = wr;
+  document.getElementById('totalTradesCount').textContent = STATE.trades.length;
+}
+
+function pBadge(prob) { const c = prob >= 70 ? 'prob-green' : 'prob-yellow'; return `<span class="prob-badge ${c}">${prob}%</span>`; }
+function typeBadge(type) { return type === 'ath' ? '<span class="badge-ath">ATH</span>' : '<span class="badge-swing">Swing</span>'; }
+function flagIcon(exch) { return exch === 'TSX' ? '🇨🇦' : '🇺🇸'; }
+
+function renderPending() {
+  const tbody = document.getElementById('pendingBody');
+  const pends = STATE.pendingEntries;
+  document.getElementById('pendingBadge').textContent = pends.length;
+  if (!pends.length) { tbody.innerHTML = '<tr><td colspan="7" class="empty">No pending entries</td></tr>'; return; }
+  tbody.innerHTML = pends.map(p => `<tr>
+    <td><div class="ticker-cell">${flagIcon(p.exchange)} ${p.ticker}</div><div class="ticker-name">${escHtml(COMPANY_NAMES[p.ticker]||'')}</div></td>
+    <td>${typeBadge(p.type)}</td>
+    <td>${pBadge(p.prob)}</td>
+    <td>${p.signalDate}</td>
+    <td>$${(p.reclaimClose||0).toFixed(2)}</td>
+    <td style="color:#58a6ff;font-size:12px">Next session close above $${(p.reclaimClose||0).toFixed(2)}</td>
+    <td><span class="badge-pending">⏳ Pending</span> <button class="btn-close" onclick="cancelPending('${p.id}')" style="margin-left:4px">✕ Cancel</button></td>
+  </tr>`).join('');
+}
+
+function renderLive() {
+  const tbody = document.getElementById('liveBody');
+  const live  = STATE.trades.filter(t => t.status === 'live' || t.status === 'partial').sort((a,b) => b.prob - a.prob);
+  document.getElementById('liveBadge').textContent = live.length;
+  if (!live.length) { tbody.innerHTML = '<tr><td colspan="12" class="empty">No live positions</td></tr>'; return; }
+  tbody.innerHTML = live.map(t => {
+    const cp = t.currentPrice || t.buyPrice;
+    const sharesOpen = t.sharesOpen || t.sharesTotal || 0;
+    const openPnl = (cp - t.buyPrice) * sharesOpen;
+    const totalUnreal = openPnl + (t.partialExitPnl || 0);
+    const chg = (cp - t.buyPrice) / t.buyPrice * 100;
+    const cls = totalUnreal >= 0 ? 'positive' : 'negative';
+    const trailStop = t.trailingStop || +(t.buyPrice * (1 - STOP_LOSS)).toFixed(2);
+    const partialTag = t.partialExitDone
+      ? `<div style="font-size:10px;color:#e3b341;margin-top:2px">⚡ 50% @ $${(t.partialExitPrice||0).toFixed(2)} (+$${(t.partialExitPnl||0).toFixed(2)})</div>` : '';
+    const targets = t.partialExitDone
+      ? `<span style="color:#3fb950">Exit @ $${t.finalTarget.toFixed(2)}</span>`
+      : `<span style="color:#e3b341">50%→$${t.partialTarget.toFixed(2)}</span> / <span style="color:#3fb950">$${t.finalTarget.toFixed(2)}</span>`;
+    const rvFlag = t.ruleVersionMismatch ? ' <span style="color:#d4a017;font-size:10px">⚙ Rule changed</span>' : '';
+    return `<tr>
+      <td><div class="ticker-cell">${flagIcon(t.exchange)} ${t.ticker}${rvFlag}</div><div class="ticker-name">${escHtml(COMPANY_NAMES[t.ticker]||'')}</div>${partialTag}</td>
+      <td>${typeBadge(t.type)}</td>
+      <td>${pBadge(t.prob)}</td>
+      <td>${t.buyDate}<br><small style="color:#8b949e">${t.buyTime} ET</small></td>
+      <td>$${t.buyPrice.toFixed(2)}</td>
+      <td>$${cp.toFixed(2)}<br><small style="color:#8b949e">${chg>=0?'+':''}${chg.toFixed(2)}%</small></td>
+      <td>$${t.invested}</td>
+      <td class="${cls}">${totalUnreal>=0?'+':''}\$${totalUnreal.toFixed(2)}</td>
+      <td class="${cls}">${chg>=0?'+':''}${chg.toFixed(2)}%</td>
+      <td style="font-size:12px">${targets}</td>
+      <td style="color:#f85149">$${trailStop.toFixed(2)}<br><small style="color:#8b949e">−2% trail</small></td>
+      <td><button class="btn-close" onclick="manualClose('${t.id}')">Close</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function renderClosed() {
+  const tbody  = document.getElementById('closedBody');
+  const closed = STATE.trades.filter(t => t.status !== 'live' && t.status !== 'partial')
+    .sort((a,b) => new Date(b.sellDate||'') - new Date(a.sellDate||''));
+  document.getElementById('closedBadge').textContent = closed.length;
+  if (!closed.length) { tbody.innerHTML = '<tr><td colspan="11" class="empty">No closed trades yet</td></tr>'; return; }
+  tbody.innerHTML = closed.map(t => {
+    const cls = (t.pnl||0) >= 0 ? 'positive' : 'negative';
+    let reasonBadge = '';
+    if (t.exitReason === 'profit')       reasonBadge = '<span class="badge-profit">✓ Profit</span>';
+    else if (t.exitReason === 'loss')    reasonBadge = '<span class="badge-loss">✗ Stop Loss</span>';
+    else                                  reasonBadge = '<span class="badge-manual">Manual</span>';
+    const partialNote = t.partialExitDone
+      ? `<br><small style="color:#e3b341">⚡ 50% @ $${(t.partialExitPrice||0).toFixed(2)} (+$${(t.partialExitPnl||0).toFixed(2)})</small>` : '';
+    return `<tr>
+      <td><div class="ticker-cell">${flagIcon(t.exchange)} ${t.ticker}</div><div class="ticker-name">${escHtml(COMPANY_NAMES[t.ticker]||'')}</div></td>
+      <td>${typeBadge(t.type)}</td><td>${pBadge(t.prob)}</td>
+      <td>${t.buyDate}</td><td>${t.sellDate||'—'}</td>
+      <td>$${t.buyPrice.toFixed(2)}</td>
+      <td>$${(t.sellPrice||0).toFixed(2)}${partialNote}</td>
+      <td>$${t.invested}</td>
+      <td class="${cls}">${(t.pnl||0)>=0?'+':''}\$${(t.pnl||0).toFixed(2)}</td>
+      <td class="${cls}">${(t.pnlPct||0)>=0?'+':''}${(t.pnlPct||0).toFixed(2)}%</td>
+      <td>${reasonBadge}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderRunLog() {
+  const tbody = document.getElementById('runLogBody');
+  const runs  = [...STATE.screenerRuns].reverse().slice(0, 30);
+  if (!runs.length) { tbody.innerHTML = '<tr><td colspan="9" class="empty">No runs yet</td></tr>'; return; }
+  tbody.innerHTML = runs.map(r => `<tr>
+    <td>${r.date}</td><td>${r.time} ET</td>
+    <td>${r.athCount||0}</td><td>${r.swingCount||0}</td>
+    <td><span class="badge-profit">${r.tradedCount||0}</span></td>
+    <td><span class="badge-pending">${r.pendingCount||0}</span></td>
+    <td><span style="color:#8b949e">${r.skippedCount||0}</span></td>
+    <td style="font-size:11px">US: ${r.regimeUS||'—'} CA: ${r.regimeTSX||'—'}</td>
+    <td>${r.totalScreened||0} / ${TICKERS.length}</td>
+  </tr>`).join('');
+}
+
+function renderNotes() {
+  const el = document.getElementById('notesList');
+  const sumEl = document.getElementById('notesSummary');
+
+  // Outcome summary counts (Change 8)
+  const outcomeCounts = {};
+  for (const n of STATE.notes) { const o = n.outcome||''; outcomeCounts[o] = (outcomeCounts[o]||0) + 1; }
+  const colors = { 'Win':'#3fb950','Loss':'#f85149','Fakeout':'#d2a8ff','Missed Entry':'#e3b341','Re-entry':'#58a6ff','Rule Change Exit':'#8b949e' };
+  sumEl.innerHTML = Object.entries(outcomeCounts).filter(([k])=>k).map(([o,c]) =>
+    `<div class="ns-count"><span class="ns-dot" style="background:${colors[o]||'#8b949e'}"></span> ${o}: <strong>${c}</strong></div>`
+  ).join('') || '<span style="color:#484f58">No notes yet</span>';
+
+  if (!STATE.notes.length) {
+    el.innerHTML = '<p class="empty-notes">No notes yet. Tag each note with a ticker + signal type + outcome to track patterns over time.</p>';
+    return;
+  }
+  el.innerHTML = STATE.notes.map((n, i) => {
+    const text       = typeof n === 'object' ? n.text : String(n);
+    const ticker     = n.ticker     || 'General';
+    const signalType = n.signalType || 'General';
+    const outcome    = n.outcome    || '';
+    const ts         = n.ts         || '';
+    const stopTs     = n.stopTriggerTs || '';
+    const tickerBadge = ticker !== 'General'
+      ? `<span style="background:#1a2a3a;color:#58a6ff;border:1px solid #1f6feb;padding:1px 7px;border-radius:4px;font-size:11px;font-weight:700">${escHtml(ticker)}</span>` : '';
+    const sigBadge = signalType === 'ATH' ? `<span class="badge-ath">${signalType}</span>`
+      : signalType === 'Swing' ? `<span class="badge-swing">${signalType}</span>`
+      : `<span class="badge" style="font-size:11px">General</span>`;
+    const outcomeBadge = outcome
+      ? `<span class="outcome-${outcome.toLowerCase().replace(/ /g,'-').replace('entry','').trim()||'rule'}">${outcome}</span>` : '';
+    const meta = [stopTs ? `🛑 Stop: ${stopTs}` : '', ts ? `Added: ${ts}` : ''].filter(Boolean).join(' · ');
+    return `<div class="note-item">
+      <span class="note-num">${i+1}.</span>
+      <div style="flex:1">
+        <div style="display:flex;gap:5px;align-items:center;margin-bottom:5px;flex-wrap:wrap">
+          ${tickerBadge}${sigBadge}${outcomeBadge}
+          <small style="color:#484f58;font-size:11px">${meta}</small>
+        </div>
+        <span class="note-text">${escHtml(text)}</span>
+      </div>
+      <button class="note-del" onclick="deleteNote(${i})">✓ Done</button>
+    </div>`;
+  }).join('');
+}
+
+function renderScheduleInfo() {
+  const runs = STATE.screenerRuns, last = runs[runs.length - 1];
+  if (last) {
+    document.getElementById('lastRunInfo').innerHTML = `Last run: <strong>${last.date} ${last.time} ET</strong> (${last.tradedCount||0} trades, ${last.pendingCount||0} pending)`;
+  }
+  if (!isWeekdayET()) { document.getElementById('nextRunInfo').innerHTML = `Next: <strong>Monday 8:00 AM ET</strong>`; return; }
+  if (shouldSkipTodayUS() && shouldSkipTodayTSX()) { document.getElementById('nextRunInfo').innerHTML = `Next: <strong>tomorrow</strong> (holiday today)`; return; }
+  const et = timeET();
+  for (const t of SCHED_TIMES) {
+    if (et < t && !hasRunToday(t)) { document.getElementById('nextRunInfo').innerHTML = `Next: <strong>today ${t} ET</strong>`; return; }
+  }
+  document.getElementById('nextRunInfo').innerHTML = `Next: <strong>tomorrow 8:00 AM ET</strong>`;
+}
+
+// ─── CLOCK + MARKET STATUS ────────────────────────────────────────────────────
+function updateClock() {
+  const et = nowET();
+  const time = et.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+  document.getElementById('etTime').textContent = time + ' ET';
+  const badge = document.getElementById('marketStatus');
+  if (isMarketOpen()) { badge.textContent = '● Market Open'; badge.className = 'market-badge open'; }
+  else { badge.textContent = '○ Market Closed'; badge.className = 'market-badge closed'; }
+}
+
+// ─── NOTIFICATION ────────────────────────────────────────────────────────────
+let notifTimer = null;
+function notify(msg) {
+  const el = document.getElementById('notification');
+  el.textContent = msg; el.style.display = 'block';
+  clearTimeout(notifTimer);
+  notifTimer = setTimeout(() => el.style.display = 'none', 7000);
+}
+
+// ─── DATA MANAGEMENT ─────────────────────────────────────────────────────────
+function clearAllData() {
+  if (!confirm('Clear ALL trade data, run history, and notes? This cannot be undone.')) return;
+  STATE = defaultState(); saveState(); renderAll(); renderNotes();
+  notify('All data cleared.');
+}
+
+// ─── MAIN TICK ────────────────────────────────────────────────────────────────
+function tick() {
+  updateClock();
+  if (!screenerRunning) {
+    checkSchedule();
+    monitorPositions();
+    confirmPendingEntries();
+  }
+  renderScheduleInfo();
+}
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  checkRuleVersion();
+  renderAll();
+  renderNotes();
+  fetchCadUsd();
+  tick();
+  setInterval(tick, 60 * 1000);
+});
 </script>
 </body>
 </html>

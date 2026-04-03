@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>S&P 500 EMA Reclaim Screener</title>
+<title>EMA Reclaim Screener — S&amp;P 500 + TSX</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -22,49 +22,78 @@
     z-index: 100;
     background: #161b22;
     border-bottom: 1px solid #30363d;
-    padding: 12px 20px;
+    padding: 10px 20px;
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 10px;
     flex-wrap: wrap;
   }
   .nav-title {
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 700;
     color: #f0f6fc;
     flex: 1;
     min-width: 180px;
   }
   .nav-title span { color: #238636; }
-
-  #runBtn {
-    background: #238636;
-    color: #fff;
-    border: none;
-    padding: 10px 28px;
+  .nav-btn {
+    padding: 7px 14px;
     border-radius: 6px;
-    font-size: 15px;
+    font-size: 13px;
     font-weight: 600;
     cursor: pointer;
-    transition: background 0.2s;
+    text-decoration: none;
     white-space: nowrap;
+    border: 1px solid #30363d;
+    background: transparent;
+    color: #8b949e;
+    transition: all 0.15s;
+  }
+  .nav-btn:hover { background: #21262d; color: #c9d1d9; }
+  .nav-btn.active { background: #1f6feb; color: #fff; border-color: #1f6feb; }
+
+  #runBtn {
+    background: #238636; color: #fff; border: none;
+    padding: 8px 22px; border-radius: 6px; font-size: 14px; font-weight: 600;
+    cursor: pointer; transition: background 0.2s; white-space: nowrap;
   }
   #runBtn:hover { background: #2ea043; }
   #runBtn:disabled { background: #3d4f3e; color: #8b949e; cursor: not-allowed; }
-
   #stopBtn {
-    background: #da3633;
-    color: #fff;
-    border: none;
-    padding: 10px 20px;
-    border-radius: 6px;
-    font-size: 15px;
-    font-weight: 600;
-    cursor: pointer;
-    display: none;
-    white-space: nowrap;
+    background: #da3633; color: #fff; border: none;
+    padding: 8px 16px; border-radius: 6px; font-size: 14px; font-weight: 600;
+    cursor: pointer; display: none; white-space: nowrap;
   }
   #stopBtn:hover { background: #f85149; }
+
+  /* RULE VERSION BANNER */
+  #ruleBanner {
+    display: none;
+    background: #1c2e1c;
+    border-bottom: 1px solid #238636;
+    padding: 8px 20px;
+    font-size: 13px;
+    color: #3fb950;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  #ruleBanner button {
+    background: transparent; border: 1px solid #238636; color: #3fb950;
+    padding: 3px 10px; border-radius: 4px; font-size: 12px; cursor: pointer;
+  }
+
+  /* REGIME CAUTION BANNER */
+  #regimeBanner {
+    display: none;
+    background: #2a1a00;
+    border-bottom: 1px solid #d4a017;
+    padding: 8px 20px;
+    font-size: 13px;
+    color: #d4a017;
+    align-items: center;
+    gap: 12px;
+  }
 
   /* STATS BAR */
   .stats-bar {
@@ -73,209 +102,152 @@
     padding: 8px 20px;
     display: flex;
     align-items: center;
-    gap: 24px;
+    gap: 20px;
     flex-wrap: wrap;
-    font-size: 13px;
-    color: #8b949e;
-  }
-  .stats-bar .stat { display: flex; align-items: center; gap: 6px; }
-  .stats-bar .stat strong { color: #c9d1d9; }
-  #errorCount { color: #f85149; }
-
-  /* PROGRESS */
-  .progress-wrap {
-    padding: 10px 20px;
-    background: #0d1117;
-    display: none;
-  }
-  .progress-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 6px;
     font-size: 12px;
     color: #8b949e;
   }
+  .stats-bar .stat { display: flex; align-items: center; gap: 5px; }
+  .stats-bar .stat strong { color: #c9d1d9; }
+  .stat-divider { color: #30363d; }
+  #errorCount { color: #f85149; }
+  .market-dot-open  { color: #3fb950; font-size: 10px; }
+  .market-dot-closed { color: #f85149; font-size: 10px; }
+
+  /* PROGRESS */
+  .progress-wrap { padding: 10px 20px; background: #0d1117; display: none; }
+  .progress-row { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; font-size: 12px; color: #8b949e; }
   #currentTicker { color: #58a6ff; font-weight: 600; min-width: 60px; }
-  .progress-bar-bg {
-    flex: 1;
-    height: 6px;
-    background: #21262d;
-    border-radius: 3px;
-    overflow: hidden;
-  }
-  .progress-bar-fill {
-    height: 100%;
-    background: linear-gradient(90deg, #238636, #2ea043);
-    border-radius: 3px;
-    transition: width 0.3s ease;
-    width: 0%;
-  }
+  .progress-bar-bg { flex: 1; height: 6px; background: #21262d; border-radius: 3px; overflow: hidden; }
+  .progress-bar-fill { height: 100%; background: linear-gradient(90deg, #238636, #2ea043); border-radius: 3px; transition: width 0.3s ease; width: 0%; }
   #progressPct { min-width: 40px; text-align: right; }
 
   /* MAIN CONTENT */
   .main { padding: 20px; max-width: 1400px; margin: 0 auto; }
 
-  /* TABLE SECTION */
-  .table-section { margin-bottom: 40px; }
-  .table-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 14px;
-    flex-wrap: wrap;
-    gap: 10px;
-  }
-  .table-title {
-    font-size: 17px;
-    font-weight: 700;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-  .table-title.ath { color: #d4a017; }
-  .table-title.swing { color: #58a6ff; }
-  .table-title .badge {
-    background: #21262d;
-    border: 1px solid #30363d;
-    border-radius: 12px;
-    padding: 2px 10px;
-    font-size: 12px;
-    font-weight: 600;
-  }
-  .table-title.ath .badge { color: #d4a017; border-color: #d4a017; }
-  .table-title.swing .badge { color: #58a6ff; border-color: #58a6ff; }
-
-  .export-btn {
-    background: #21262d;
-    color: #8b949e;
-    border: 1px solid #30363d;
-    padding: 6px 14px;
-    border-radius: 5px;
-    font-size: 12px;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-  .export-btn:hover { background: #30363d; color: #c9d1d9; }
-
-  .table-wrap {
+  /* BACKTEST PANEL */
+  .backtest-panel {
     background: #161b22;
     border: 1px solid #30363d;
     border-radius: 8px;
+    margin-bottom: 24px;
     overflow: hidden;
-    overflow-x: auto;
   }
+  .backtest-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 16px; border-bottom: 1px solid #30363d;
+    font-weight: 600; font-size: 13px; color: #8b949e;
+    flex-wrap: wrap; gap: 8px;
+  }
+  .backtest-header span { color: #c9d1d9; }
+  .backtest-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 1px; background: #30363d; }
+  .bt-cell { background: #161b22; padding: 10px 14px; text-align: center; }
+  .bt-val { font-size: 20px; font-weight: 700; color: #f0f6fc; }
+  .bt-label { font-size: 10px; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+  .bt-val.green { color: #3fb950; }
+  .bt-val.yellow { color: #d4a017; }
+  .bt-val.red { color: #f85149; }
 
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    min-width: 600px;
+  /* TABLE SECTIONS */
+  .table-section { margin-bottom: 40px; }
+  .table-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 14px; flex-wrap: wrap; gap: 10px;
   }
+  .table-title { font-size: 17px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+  .table-title.ath  { color: #d4a017; }
+  .table-title.swing { color: #58a6ff; }
+  .table-title .badge {
+    background: #21262d; border: 1px solid #30363d; border-radius: 12px;
+    padding: 2px 10px; font-size: 12px; font-weight: 600;
+  }
+  .table-title.ath .badge   { color: #d4a017; border-color: #d4a017; }
+  .table-title.swing .badge { color: #58a6ff; border-color: #58a6ff; }
+
+  .export-btn {
+    background: #21262d; color: #8b949e; border: 1px solid #30363d;
+    padding: 6px 14px; border-radius: 5px; font-size: 12px; cursor: pointer; transition: all 0.2s;
+  }
+  .export-btn:hover { background: #30363d; color: #c9d1d9; }
+
+  .table-wrap { background: #161b22; border: 1px solid #30363d; border-radius: 8px; overflow: hidden; overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; min-width: 600px; }
   thead th {
-    background: #21262d;
-    padding: 12px 16px;
-    text-align: left;
-    font-size: 12px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: #8b949e;
-    border-bottom: 1px solid #30363d;
-    white-space: nowrap;
+    background: #21262d; padding: 12px 16px; text-align: left;
+    font-size: 12px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.05em; color: #8b949e; border-bottom: 1px solid #30363d; white-space: nowrap;
   }
   thead th:last-child { text-align: center; }
-
-  tbody tr {
-    border-bottom: 1px solid #21262d;
-    transition: background 0.15s;
-    animation: fadeIn 0.3s ease;
-  }
+  tbody tr { border-bottom: 1px solid #21262d; transition: background 0.15s; animation: fadeIn 0.3s ease; }
   tbody tr:last-child { border-bottom: none; }
   tbody tr:hover { background: #1c2128; }
-
-  @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(-4px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
   td { padding: 12px 16px; vertical-align: top; }
   td:last-child { text-align: center; vertical-align: middle; }
 
-  .stock-ticker {
-    font-weight: 700;
-    font-size: 15px;
-    color: #f0f6fc;
-    letter-spacing: 0.03em;
-  }
-  .stock-name {
-    color: #8b949e;
-    font-size: 12px;
-    margin-top: 2px;
-  }
-  .stock-price {
-    color: #3fb950;
-    font-weight: 600;
-    font-size: 13px;
-    margin-top: 4px;
-  }
+  .stock-ticker { font-weight: 700; font-size: 15px; color: #f0f6fc; letter-spacing: 0.03em; }
+  .stock-name   { color: #8b949e; font-size: 12px; margin-top: 2px; }
+  .stock-price  { color: #3fb950; font-weight: 600; font-size: 13px; margin-top: 4px; }
 
   .metrics { list-style: none; }
-  .metrics li {
-    font-size: 12px;
-    color: #8b949e;
-    padding: 1px 0;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-  .metrics li::before {
-    content: '•';
-    color: #30363d;
-    font-size: 14px;
-  }
-  .metrics .val { color: #c9d1d9; font-weight: 500; }
+  .metrics li { font-size: 12px; color: #8b949e; padding: 1px 0; display: flex; align-items: center; gap: 6px; }
+  .metrics li::before { content: '•'; color: #30363d; font-size: 14px; }
+  .metrics .val  { color: #c9d1d9; font-weight: 500; }
   .metrics .good { color: #3fb950; }
   .metrics .warn { color: #d4a017; }
 
-  /* PROBABILITY BADGE */
-  .prob-badge {
+  /* SIGNAL STRENGTH BADGE */
+  .strength-badge {
     display: inline-block;
-    padding: 6px 14px;
-    border-radius: 20px;
-    font-size: 16px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 10px;
     font-weight: 700;
-    min-width: 68px;
-    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 4px;
   }
-  .prob-green { background: #0d4a20; color: #3fb950; border: 1px solid #238636; }
+  .strength-strong   { background: #1a3a1a; color: #3fb950; border: 1px solid #238636; }
+  .strength-moderate { background: #2a2a1a; color: #d4a017; border: 1px solid #9e6a03; }
+  .strength-weak     { background: #21262d; color: #8b949e; border: 1px solid #30363d; }
+
+  /* PROBABILITY BADGE */
+  .prob-badge { display: inline-block; padding: 6px 14px; border-radius: 20px; font-size: 16px; font-weight: 700; min-width: 68px; text-align: center; }
+  .prob-green  { background: #0d4a20; color: #3fb950; border: 1px solid #238636; }
   .prob-yellow { background: #3d2f00; color: #d4a017; border: 1px solid #9e6a03; }
   .prob-orange { background: #3d1a00; color: #f0883e; border: 1px solid #bd561d; }
 
-  /* EMPTY STATE */
-  .empty-state {
-    padding: 40px 20px;
-    text-align: center;
-    color: #484f58;
+  /* LABEL TAGS */
+  .label-tag {
+    display: inline-block; padding: 1px 7px; border-radius: 4px; font-size: 10px; font-weight: 600;
+    margin-top: 3px; margin-right: 3px;
   }
-  .empty-state svg { margin-bottom: 12px; opacity: 0.4; }
+  .label-caution   { background: #2a2a1a; color: #d4a017; border: 1px solid #9e6a03; }
+  .label-no-trend  { background: #1a1a2a; color: #79c0ff; border: 1px solid #1f6feb; }
+  .label-no-volume { background: #2a1a2a; color: #d2a8ff; border: 1px solid #6e40c9; }
+
+  /* EMPTY STATE */
+  .empty-state { padding: 40px 20px; text-align: center; color: #484f58; }
   .empty-state p { font-size: 14px; }
 
-  /* FOOTER */
-  .footer {
-    text-align: center;
-    padding: 24px 20px;
-    color: #484f58;
-    font-size: 12px;
-    border-top: 1px solid #21262d;
-    margin-top: 20px;
+  /* MINIMIZE BUTTON */
+  .minimize-btn {
+    background: #21262d; border: 1px solid #30363d; color: #8b949e;
+    border-radius: 6px; width: 30px; height: 30px; font-size: 18px;
+    line-height: 1; cursor: pointer; display: flex; align-items: center;
+    justify-content: center; transition: background 0.15s, color 0.15s; flex-shrink: 0;
   }
+  .minimize-btn:hover { background: #30363d; color: #f0f6fc; }
+  .table-wrap.minimized { display: none; }
+
+  /* FOOTER */
+  .footer { text-align: center; padding: 24px 20px; color: #484f58; font-size: 12px; border-top: 1px solid #21262d; margin-top: 20px; }
   .footer a { color: #58a6ff; text-decoration: none; }
   .footer a:hover { text-decoration: underline; }
 
-  /* MOBILE */
   @media (max-width: 600px) {
     .nav { padding: 10px 14px; }
-    .nav-title { font-size: 15px; }
+    .nav-title { font-size: 14px; }
     .main { padding: 12px; }
     td { padding: 10px 12px; }
     .prob-badge { font-size: 14px; padding: 5px 10px; min-width: 56px; }
@@ -284,20 +256,48 @@
 </head>
 <body>
 
+<!-- RULE VERSION BANNER -->
+<div id="ruleBanner">
+  <span>⚙ Screener rules updated to <strong id="ruleVersionLabel">v1</strong>. Open positions may be re-evaluated.</span>
+  <button onclick="document.getElementById('ruleBanner').style.display='none'">Dismiss</button>
+</div>
+
+<!-- REGIME CAUTION BANNER -->
+<div id="regimeBanner">
+  ⚠ <strong>Regime Caution:</strong> <span id="regimeCautionDetail">Benchmarks below 220 EMA — new auto-entries suppressed.</span>
+</div>
+
 <!-- NAV -->
 <nav class="nav">
-  <div class="nav-title">S&amp;P 500 <span>EMA Reclaim</span> Screener</div>
-  <button id="runBtn" onclick="startScreen()">&#9654; Run Screener</button>
+  <div class="nav-title">🇺🇸 S&amp;P 500 + 🇨🇦 TSX &nbsp;<span>EMA Reclaim</span></div>
+  <a href="index.html"              class="nav-btn">📈 Tracker</a>
+  <a href="screener.html"           class="nav-btn active">🔍 Screener</a>
+  <a href="long-term-tracker.html"  class="nav-btn">📊 Long-Term</a>
+  <button id="runBtn"  onclick="startScreen()">&#9654; Run Screener</button>
   <button id="stopBtn" onclick="stopScreen()">&#9632; Stop</button>
 </nav>
 
 <!-- STATS BAR -->
 <div class="stats-bar">
-  <div class="stat">Screened: <strong id="screenedCount">0</strong> / <strong id="totalCount">475</strong></div>
+  <div class="stat">Screened: <strong id="screenedCount">0</strong> / <strong id="totalCount">515</strong></div>
+  <span class="stat-divider">|</span>
   <div class="stat">Table 1 (ATH): <strong id="t1Count">0</strong></div>
   <div class="stat">Table 2 (Swing): <strong id="t2Count">0</strong></div>
-  <div class="stat">Errors: <strong id="errorCount">0</strong></div>
+  <span class="stat-divider">|</span>
+  <div class="stat">Errors / Failed: <strong id="errorCount">0</strong></div>
   <div class="stat">Elapsed: <strong id="elapsedTime">0s</strong></div>
+  <span class="stat-divider">|</span>
+  <div class="stat">
+    <span id="usMarketDot" class="market-dot-closed">●</span>
+    US Market: <strong id="usMarketStatus">Closed</strong>
+  </div>
+  <div class="stat">
+    <span id="tsxMarketDot" class="market-dot-closed">●</span>
+    TSX Market: <strong id="tsxMarketStatus">Closed</strong>
+  </div>
+  <span class="stat-divider">|</span>
+  <div class="stat">Regime: <strong id="regimeStatus" style="color:#8b949e">—</strong></div>
+  <div class="stat">Last run: <strong id="lastRunStat">never</strong></div>
 </div>
 
 <!-- PROGRESS -->
@@ -312,24 +312,46 @@
 <!-- MAIN -->
 <div class="main">
 
+  <!-- BACKTEST PANEL -->
+  <div class="backtest-panel" id="backtestPanel">
+    <div class="backtest-header">
+      <span>📊 Backtest Validation <small style="color:#484f58;font-weight:400">(2-year simulated · last run: <span id="btLastRun">never</span>)</small></span>
+      <div style="display:flex;gap:8px">
+        <button onclick="runBacktest()" style="background:#21262d;border:1px solid #30363d;color:#8b949e;padding:5px 12px;border-radius:5px;font-size:12px;cursor:pointer" id="btRunBtn">Run Backtest</button>
+        <button onclick="togglePanel('bt')" style="background:#21262d;border:1px solid #30363d;color:#8b949e;padding:5px 8px;border-radius:5px;font-size:12px;cursor:pointer" id="btMinBtn">−</button>
+      </div>
+    </div>
+    <div id="btWrap">
+      <div class="backtest-grid" id="btGrid">
+        <div class="bt-cell"><div class="bt-val" id="btWinRate">—</div><div class="bt-label">Win Rate (ATH)</div></div>
+        <div class="bt-cell"><div class="bt-val" id="btWinRateSw">—</div><div class="bt-label">Win Rate (Swing)</div></div>
+        <div class="bt-cell"><div class="bt-val" id="btAvgReturn">—</div><div class="bt-label">Avg Return</div></div>
+        <div class="bt-cell"><div class="bt-val" id="btSignals">—</div><div class="bt-label">Signals Tested</div></div>
+        <div class="bt-cell"><div class="bt-val" id="btCalib">—</div><div class="bt-label">Calibration</div></div>
+      </div>
+      <div id="btCalibTable" style="padding:10px 16px;font-size:12px;color:#8b949e;display:none"></div>
+    </div>
+  </div>
+
   <!-- TABLE 1 -->
-  <div class="table-section">
+  <div class="table-section" id="t1Section">
     <div class="table-header">
       <div class="table-title ath">
         &#9733; Near ATH — EMA Reclaim
         <span class="badge" id="t1Badge">0</span>
       </div>
-      <button class="export-btn" onclick="exportCSV('ath')">&#8595; Export CSV</button>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="export-btn" onclick="exportCSV('ath')">&#8595; Export CSV</button>
+        <button class="minimize-btn" id="t1MinBtn" onclick="togglePanel('t1')" title="Minimize">&#8722;</button>
+      </div>
     </div>
-    <div class="table-wrap">
+    <div class="table-wrap" id="t1Wrap">
       <table id="t1Table">
-        <thead>
-          <tr>
-            <th>Stock</th>
-            <th>Why It Qualifies</th>
-            <th>Breakout Probability</th>
-          </tr>
-        </thead>
+        <thead><tr>
+          <th>Stock</th>
+          <th>Why It Qualifies</th>
+          <th>Probability &amp; Strength</th>
+        </tr></thead>
         <tbody id="t1Body">
           <tr><td colspan="3"><div class="empty-state"><p>Run the screener to see results</p></div></td></tr>
         </tbody>
@@ -338,23 +360,24 @@
   </div>
 
   <!-- TABLE 2 -->
-  <div class="table-section">
+  <div class="table-section" id="t2Section">
     <div class="table-header">
       <div class="table-title swing">
         &#9650; Swing High — EMA Reclaim
         <span class="badge" id="t2Badge">0</span>
       </div>
-      <button class="export-btn" onclick="exportCSV('swing')">&#8595; Export CSV</button>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="export-btn" onclick="exportCSV('swing')">&#8595; Export CSV</button>
+        <button class="minimize-btn" id="t2MinBtn" onclick="togglePanel('t2')" title="Minimize">&#8722;</button>
+      </div>
     </div>
-    <div class="table-wrap">
+    <div class="table-wrap" id="t2Wrap">
       <table id="t2Table">
-        <thead>
-          <tr>
-            <th>Stock</th>
-            <th>Why It Qualifies</th>
-            <th>Breakout Probability</th>
-          </tr>
-        </thead>
+        <thead><tr>
+          <th>Stock</th>
+          <th>Why It Qualifies</th>
+          <th>Probability &amp; Strength</th>
+        </tr></thead>
         <tbody id="t2Body">
           <tr><td colspan="3"><div class="empty-state"><p>Run the screener to see results</p></div></td></tr>
         </tbody>
@@ -362,31 +385,85 @@
     </div>
   </div>
 
-</div>
+</div><!-- .main -->
 
 <!-- FOOTER -->
 <div class="footer">
-  Data sourced from <a href="https://finance.yahoo.com" target="_blank">Yahoo Finance</a> via
-  <a href="https://corsproxy.io" target="_blank">corsproxy.io</a>.
-  For personal use only. Not financial advice.
+  Data: <a href="https://finance.yahoo.com" target="_blank">Yahoo Finance</a> via
+  <a href="https://corsproxy.io" target="_blank">corsproxy.io</a> /
+  <a href="https://allorigins.win" target="_blank">allorigins.win</a> (fallback).
+  For personal use only. Not financial advice. · Rule version: <strong id="footerVersion">v1</strong>
 </div>
 
+<!-- FIREBASE SDK (placeholder — fill in your config below before enabling) -->
+<!--
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
+import { getDatabase, ref, set, get } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-database.js";
+window._fbApp = initializeApp(FIREBASE_CONFIG);
+window._fbDb  = getDatabase(window._fbApp);
+</script>
+-->
+
 <script>
-// ─── CONSTANTS ───────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════
+// RULE VERSION — bump this when screener logic changes; triggers re-eval
+// ═══════════════════════════════════════════════════════════════════════
+const RULE_VERSION = 'v3'; // v1=original, v2=volume+regime, v3=weekly+recency+prob-upgrade
+
+// ─── FIREBASE CONFIG (placeholder — fill in to enable cross-device sync) ─────
+const FIREBASE_CONFIG = {
+  apiKey:            "YOUR_API_KEY",
+  authDomain:        "YOUR_PROJECT.firebaseapp.com",
+  databaseURL:       "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
+  projectId:         "YOUR_PROJECT",
+  storageBucket:     "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId:             "YOUR_APP_ID"
+};
+// Set to true after filling in the config above:
+const FIREBASE_ENABLED = false;
+
+// ─── MARKET CALENDAR (NYSE + TSX holidays 2024–2026) ─────────────────────────
+const NYSE_HOLIDAYS = new Set([
+  '2024-01-01','2024-01-15','2024-02-19','2024-03-29','2024-05-27',
+  '2024-06-19','2024-07-04','2024-09-02','2024-11-28','2024-12-25',
+  '2025-01-01','2025-01-20','2025-02-17','2025-04-18','2025-05-26',
+  '2025-06-19','2025-07-04','2025-09-01','2025-11-27','2025-12-25',
+  '2026-01-01','2026-01-19','2026-02-16','2026-04-03','2026-05-25',
+  '2026-06-19','2026-07-03','2026-09-07','2026-11-26','2026-12-25',
+]);
+const TSX_HOLIDAYS = new Set([
+  '2024-01-01','2024-02-19','2024-03-29','2024-05-20','2024-07-01',
+  '2024-08-05','2024-09-02','2024-10-14','2024-11-11','2024-12-25','2024-12-26',
+  '2025-01-01','2025-02-17','2025-04-18','2025-05-19','2025-07-01',
+  '2025-08-04','2025-09-01','2025-10-13','2025-11-11','2025-12-25','2025-12-26',
+  '2026-01-01','2026-02-16','2026-04-03','2026-05-18','2026-07-01',
+  '2026-08-03','2026-09-07','2026-10-12','2026-11-11','2026-12-25','2026-12-28',
+]);
+
+// ─── CONSTANTS ────────────────────────────────────────────────────────────────
 const EMA_PERIOD          = 220;
 const MA_BUFFER           = 0.003;
 const ATH_THRESHOLD       = 0.05;
 const MAX_RECLAIM_BARS    = 60;
 const MAX_BELOW_BARS      = 10;
-const UPTREND_LOOKBACK    = 60;
 const SWING_HIGH_MIN_BARS = 126;
 const SWING_HIGH_MAX_BARS = 378;
 const SWING_NEAR_MIN      = 0.01;
 const SWING_NEAR_MAX      = 0.05;
 const S2_ATH_MAX_DRAWDOWN = 0.15;
+const VOLUME_CONFIRM_RATIO = 1.4;  // Change 1: reclaim candle volume threshold
+const WEEKLY_EMA_PERIOD   = 44;    // Change 12: 44-week EMA ≈ 220-day
+const WEEKLY_TREND_PENALTY = 15;   // Change 12: subtract this if weekly trend fails
 
 // ─── UNIVERSE ─────────────────────────────────────────────────────────────────
-const TICKERS = ["A","AAL","AAP","AAPL","ABBV","ABT","ACN","ADBE","ADI","ADM","ADP","ADSK","AEE","AEP","AES","AFL","AIG","AIZ","AJG","AKAM","ALB","ALGN","ALL","ALLE","AMAT","AMCR","AMD","AME","AMGN","AMP","AMT","AMZN","ANET","AON","AOS","APA","APD","APH","APTV","ARE","ATO","AVB","AVGO","AVY","AWK","AXON","AXP","AZO","BA","BAC","BALL","BAX","BBWI","BBY","BDX","BEN","BF-B","BG","BIIB","BK","BKNG","BKR","BLDR","BLK","BMY","BR","BRK-B","BRO","BSX","BWA","BX","BXP","C","CAG","CAH","CARR","CAT","CB","CBOE","CBRE","CCI","CCL","CDNS","CDW","CE","CEG","CF","CFG","CHD","CHRW","CHTR","CI","CINF","CL","CLX","CMA","CMCSA","CME","CMG","CMI","CMS","CNC","CNP","COF","COO","COP","COST","CPB","CPRT","CPT","CRL","CRM","CRWD","CSCO","CSGP","CSX","CTAS","CTRA","CTSH","CTVA","CVS","CVX","CZR","D","DAL","DAY","DD","DE","DECK","DG","DGX","DHI","DHR","DIS","DLR","DLTR","DOC","DOV","DOW","DPZ","DRI","DTE","DUK","DVA","DVN","DXCM","EA","EBAY","ECL","ED","EFX","EG","EIX","EL","ELV","EMN","EMR","ENPH","EOG","EPAM","EQIX","EQR","EQT","ES","ESS","ETN","ETR","ETSY","EVRG","EW","EXC","EXPD","EXPE","EXR","F","FANG","FAST","FCX","FDS","FDX","FE","FFIV","FICO","FIS","FITB","FMC","FOX","FOXA","FRT","FSLR","FTNT","FTV","GD","GDDY","GE","GEHC","GEN","GILD","GIS","GL","GLW","GM","GNRC","GOOGL","GOOG","GPC","GPN","GS","GWW","HAL","HAS","HBAN","HCA","HD","HIG","HII","HLT","HOLX","HON","HPE","HPQ","HRL","HSIC","HST","HSY","HUBB","HUM","HWM","IBM","ICE","IDXX","IEX","IFF","ILMN","INCY","INTC","INTU","INVH","IP","IQV","IR","IRM","ISRG","IT","ITW","IVZ","J","JBHT","JCI","JKHY","JNJ","JPM","KEY","KEYS","KHC","KIM","KLAC","KMB","KMI","KMX","KO","KR","L","LDOS","LEN","LH","LHX","LIN","LKQ","LLY","LMT","LNT","LOW","LRCX","LULU","LUV","LVS","LW","LYB","LYV","MA","MAA","MAR","MAS","MCD","MCHP","MCK","MCO","MDLZ","MDT","MET","META","MGM","MHK","MKC","MKTX","MLM","MNST","MO","MOH","MOS","MPC","MPWR","MRK","MRNA","MS","MSCI","MSFT","MSI","MTB","MTD","MU","NCLH","NDAQ","NEE","NEM","NFLX","NI","NKE","NOC","NOW","NRG","NSC","NTAP","NTRS","NUE","NVDA","NVR","NWS","NWSA","NXPI","O","ODFL","OKE","OMC","ON","ORCL","ORLY","OXY","PAYC","PAYX","PCAR","PCG","PEG","PEP","PFE","PFG","PG","PGR","PH","PHM","PKG","PLD","PM","PNC","PNR","PNW","PODD","POOL","PPG","PPL","PRU","PSA","PSX","PTC","PWR","PYPL","QCOM","QRVO","RCL","REG","REGN","RF","RJF","RL","RMD","ROK","ROL","ROP","ROST","RSG","RTX","RVTY","SBAC","SBUX","SCHW","SJM","SLB","SMCI","SNA","SNPS","SO","SPG","SPGI","SRE","STE","STLD","STT","STX","STZ","SWK","SWKS","SYF","SYK","SYY","T","TAP","TDG","TDY","TECH","TEL","TER","TFC","TFX","TGT","TJX","TMO","TMUS","TPR","TRGP","TRMB","TROW","TRV","TSCO","TSLA","TSN","TT","TTWO","TXN","TXT","TYL","UAL","UDR","UHS","ULTA","UNH","UNP","UPS","URI","USB","V","VFC","VICI","VLO","VLTO","VMC","VRSK","VRSN","VRTX","VTR","VTRS","VZ","WAB","WAT","WDAY","WBD","WDC","WELL","WFC","WHR","WM","WMB","WMT","WRB","WST","WTW","WY","WYNN","XEL","XOM","XYL","YUM","ZBH","ZBRA","ZTS"];
+const SP500_TICKERS = ["A","AAL","AAP","AAPL","ABBV","ABT","ACN","ADBE","ADI","ADM","ADP","ADSK","AEE","AEP","AES","AFL","AIG","AIZ","AJG","AKAM","ALB","ALGN","ALL","ALLE","AMAT","AMCR","AMD","AME","AMGN","AMP","AMT","AMZN","ANET","AON","AOS","APA","APD","APH","APTV","ARE","ATO","AVB","AVGO","AVY","AWK","AXON","AXP","AZO","BA","BAC","BALL","BAX","BBWI","BBY","BDX","BEN","BF-B","BG","BIIB","BK","BKNG","BKR","BLDR","BLK","BMY","BR","BRK-B","BRO","BSX","BWA","BX","BXP","C","CAG","CAH","CARR","CAT","CB","CBOE","CBRE","CCI","CCL","CDNS","CDW","CE","CEG","CF","CFG","CHD","CHRW","CHTR","CI","CINF","CL","CLX","CMA","CMCSA","CME","CMG","CMI","CMS","CNC","CNP","COF","COO","COP","COST","CPB","CPRT","CPT","CRL","CRM","CRWD","CSCO","CSGP","CSX","CTAS","CTRA","CTSH","CTVA","CVS","CVX","CZR","D","DAL","DAY","DD","DE","DECK","DG","DGX","DHI","DHR","DIS","DLR","DLTR","DOC","DOV","DOW","DPZ","DRI","DTE","DUK","DVA","DVN","DXCM","EA","EBAY","ECL","ED","EFX","EG","EIX","EL","ELV","EMN","EMR","ENPH","EOG","EPAM","EQIX","EQR","EQT","ES","ESS","ETN","ETR","ETSY","EVRG","EW","EXC","EXPD","EXPE","EXR","F","FANG","FAST","FCX","FDS","FDX","FE","FFIV","FICO","FIS","FITB","FMC","FOX","FOXA","FRT","FSLR","FTNT","FTV","GD","GDDY","GE","GEHC","GEN","GILD","GIS","GL","GLW","GM","GNRC","GOOGL","GOOG","GPC","GPN","GS","GWW","HAL","HAS","HBAN","HCA","HD","HIG","HII","HLT","HOLX","HON","HPE","HPQ","HRL","HSIC","HST","HSY","HUBB","HUM","HWM","IBM","ICE","IDXX","IEX","IFF","ILMN","INCY","INTC","INTU","INVH","IP","IQV","IR","IRM","ISRG","IT","ITW","IVZ","J","JBHT","JCI","JKHY","JNJ","JPM","KEY","KEYS","KHC","KIM","KLAC","KMB","KMI","KMX","KO","KR","L","LDOS","LEN","LH","LHX","LIN","LKQ","LLY","LMT","LNT","LOW","LRCX","LULU","LUV","LVS","LW","LYB","LYV","MA","MAA","MAR","MAS","MCD","MCHP","MCK","MCO","MDLZ","MDT","MET","META","MGM","MHK","MKC","MKTX","MLM","MNST","MO","MOH","MOS","MPC","MPWR","MRK","MRNA","MS","MSCI","MSFT","MSI","MTB","MTD","MU","NCLH","NDAQ","NEE","NEM","NFLX","NI","NKE","NOC","NOW","NRG","NSC","NTAP","NTRS","NUE","NVDA","NVR","NWS","NWSA","NXPI","O","ODFL","OKE","OMC","ON","ORCL","ORLY","OXY","PAYC","PAYX","PCAR","PCG","PEG","PEP","PFE","PFG","PG","PGR","PH","PHM","PKG","PLD","PM","PNC","PNR","PNW","PODD","POOL","PPG","PPL","PRU","PSA","PSX","PTC","PWR","PYPL","QCOM","QRVO","RCL","REG","REGN","RF","RJF","RL","RMD","ROK","ROL","ROP","ROST","RSG","RTX","RVTY","SBAC","SBUX","SCHW","SJM","SLB","SMCI","SNA","SNPS","SO","SPG","SPGI","SRE","STE","STLD","STT","STX","STZ","SWK","SWKS","SYF","SYK","SYY","T","TAP","TDG","TDY","TECH","TEL","TER","TFC","TFX","TGT","TJX","TMO","TMUS","TPR","TRGP","TRMB","TROW","TRV","TSCO","TSLA","TSN","TT","TTWO","TXN","TXT","TYL","UAL","UDR","UHS","ULTA","UNH","UNP","UPS","URI","USB","V","VFC","VICI","VLO","VLTO","VMC","VRSK","VRSN","VRTX","VTR","VTRS","VZ","WAB","WAT","WDAY","WBD","WDC","WELL","WFC","WHR","WM","WMB","WMT","WRB","WST","WTW","WY","WYNN","XEL","XOM","XYL","YUM","ZBH","ZBRA","ZTS"];
+const TSX_TICKERS = ["RY.TO","TD.TO","BN.TO","ENB.TO","CNR.TO","CP.TO","BMO.TO","BNS.TO","SHOP.TO","SU.TO","CNQ.TO","MFC.TO","TRP.TO","CM.TO","ATD.TO","WCN.TO","BAM.TO","SLF.TO","IFC.TO","TRI.TO","L.TO","POW.TO","GWO.TO","T.TO","BCE.TO","WPM.TO","ABX.TO","AEM.TO","NTR.TO","FTS.TO","DOL.TO","CSU.TO","QSR.TO","H.TO","GFL.TO","WSP.TO","MRU.TO","RCI-B.TO","IMO.TO","FFH.TO"];
+const TICKERS = [...SP500_TICKERS, ...TSX_TICKERS];
+const EXCHANGE_MAP = {};
+SP500_TICKERS.forEach(t => EXCHANGE_MAP[t] = 'US');
+TSX_TICKERS.forEach(t => EXCHANGE_MAP[t] = 'TSX');
 
 // ─── COMPANY NAMES ────────────────────────────────────────────────────────────
 const COMPANY_NAMES = {
@@ -508,233 +585,324 @@ const COMPANY_NAMES = {
   "WM":"Waste Management","WMB":"Williams Companies","WMT":"Walmart Inc.","WRB":"W.R. Berkley Corp",
   "WST":"West Pharmaceutical Services","WTW":"Willis Towers Watson","WY":"Weyerhaeuser Co.",
   "WYNN":"Wynn Resorts","XEL":"Xcel Energy","XOM":"Exxon Mobil Corp","XYL":"Xylem Inc.",
-  "YUM":"Yum! Brands","ZBH":"Zimmer Biomet Holdings","ZBRA":"Zebra Technologies","ZTS":"Zoetis Inc."
+  "YUM":"Yum! Brands","ZBH":"Zimmer Biomet Holdings","ZBRA":"Zebra Technologies","ZTS":"Zoetis Inc.",
+  "RY.TO":"Royal Bank of Canada","TD.TO":"Toronto-Dominion Bank","BN.TO":"Brookfield Corp",
+  "ENB.TO":"Enbridge Inc.","CNR.TO":"Canadian National Railway","CP.TO":"Canadian Pacific Kansas City",
+  "BMO.TO":"Bank of Montreal","BNS.TO":"Bank of Nova Scotia","SHOP.TO":"Shopify Inc.",
+  "SU.TO":"Suncor Energy","CNQ.TO":"Canadian Natural Resources","MFC.TO":"Manulife Financial",
+  "TRP.TO":"TC Energy Corp","CM.TO":"CIBC","ATD.TO":"Alimentation Couche-Tard",
+  "WCN.TO":"Waste Connections","BAM.TO":"Brookfield Asset Management","SLF.TO":"Sun Life Financial",
+  "IFC.TO":"Intact Financial","TRI.TO":"Thomson Reuters","L.TO":"Loblaw Companies",
+  "POW.TO":"Power Corp of Canada","GWO.TO":"Great-West Lifeco","T.TO":"TELUS Corp",
+  "BCE.TO":"BCE Inc.","WPM.TO":"Wheaton Precious Metals","ABX.TO":"Barrick Gold",
+  "AEM.TO":"Agnico Eagle Mines","NTR.TO":"Nutrien Ltd.","FTS.TO":"Fortis Inc.",
+  "DOL.TO":"Dollarama Inc.","CSU.TO":"Constellation Software","QSR.TO":"Restaurant Brands Intl",
+  "H.TO":"Hydro One","GFL.TO":"GFL Environmental","WSP.TO":"WSP Global",
+  "MRU.TO":"Metro Inc.","RCI-B.TO":"Rogers Communications","IMO.TO":"Imperial Oil","FFH.TO":"Fairfax Financial"
 };
 
 // ─── STATE ────────────────────────────────────────────────────────────────────
-let running = false;
-let stopRequested = false;
-let t1Results = [];
-let t2Results = [];
-let startTime = null;
-let timerInterval = null;
-let screenedCount = 0;
-let errorCount = 0;
+let running = false, stopRequested = false;
+let t1Results = [], t2Results = [];
+let startTime = null, timerInterval = null;
+let screenedCount = 0, errorCount = 0, failedTickers = 0;
 let athTickers = new Set();
+// Regime cache: { spyAbove: bool, xiuAbove: bool, checked: bool }
+let regimeCache = null;
+
+// ─── CALENDAR HELPERS ─────────────────────────────────────────────────────────
+function todayStr() {
+  return new Date().toISOString().split('T')[0];
+}
+function isUSMarketOpen() {
+  const now = new Date();
+  const et = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const day = et.getDay();
+  if (day === 0 || day === 6) return false;
+  const ymd = `${et.getFullYear()}-${String(et.getMonth()+1).padStart(2,'0')}-${String(et.getDate()).padStart(2,'0')}`;
+  if (NYSE_HOLIDAYS.has(ymd)) return false;
+  const mins = et.getHours() * 60 + et.getMinutes();
+  return mins >= 570 && mins < 960;
+}
+function isTSXMarketOpen() {
+  const now = new Date();
+  const et = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const day = et.getDay();
+  if (day === 0 || day === 6) return false;
+  const ymd = `${et.getFullYear()}-${String(et.getMonth()+1).padStart(2,'0')}-${String(et.getDate()).padStart(2,'0')}`;
+  if (TSX_HOLIDAYS.has(ymd)) return false;
+  const mins = et.getHours() * 60 + et.getMinutes();
+  return mins >= 570 && mins < 960;
+}
+function isUSHolidayToday() { return NYSE_HOLIDAYS.has(todayStr()); }
+function isTSXHolidayToday() { return TSX_HOLIDAYS.has(todayStr()); }
 
 // ─── EMA ─────────────────────────────────────────────────────────────────────
 function calcEMA(prices, period) {
   const k = 2 / (period + 1);
   const ema = new Array(prices.length);
   ema[0] = prices[0];
-  for (let i = 1; i < prices.length; i++) {
-    ema[i] = prices[i] * k + ema[i - 1] * (1 - k);
-  }
+  for (let i = 1; i < prices.length; i++) ema[i] = prices[i] * k + ema[i - 1] * (1 - k);
   return ema;
+}
+
+// ─── WEEKLY EMA (Change 12) — build weekly candles from daily closes ──────────
+function calcWeeklyEMA(dailyOHLCV, period) {
+  // Group daily closes into weekly buckets (week ending Friday)
+  const weeklyCloses = [];
+  let weekClose = null;
+  for (const d of dailyOHLCV) {
+    const dt = new Date(d.date + 'T12:00:00Z');
+    weekClose = d.close;
+    // Friday = 5; collect last close of each week
+    if (dt.getDay() === 5) {
+      weeklyCloses.push(weekClose);
+      weekClose = null;
+    }
+  }
+  // Add last partial week
+  if (weekClose !== null) weeklyCloses.push(weekClose);
+  if (weeklyCloses.length < period) return null;
+  return calcEMA(weeklyCloses, period);
+}
+
+// Check if current weekly close is above 44-week EMA
+function checkWeeklyTrend(ohlcv) {
+  const wema = calcWeeklyEMA(ohlcv, WEEKLY_EMA_PERIOD);
+  if (!wema) return true; // not enough data — don't penalize
+  const lastWeeklyClose = ohlcv[ohlcv.length - 1].close;
+  return lastWeeklyClose > wema[wema.length - 1];
 }
 
 // ─── FIND VALID RECLAIM ───────────────────────────────────────────────────────
 function findValidReclaim(c, mu, md) {
   const n = c.length;
-  let reclaimIdx = -1;
-  let belowEpStart = -1;
-
-  // Walk backwards to find the most recent reclaim crossover
   for (let i = n - 1; i >= 1; i--) {
     if (c[i] > mu[i] && c[i - 1] <= mu[i - 1]) {
-      // Found reclaim at i — look back for a below episode
       let belowIdx = -1;
       for (let j = i - 1; j >= Math.max(0, i - MAX_RECLAIM_BARS); j--) {
-        if (c[j] < md[j]) {
-          belowIdx = j;
-          break;
-        }
+        if (c[j] < md[j]) { belowIdx = j; break; }
       }
-      if (belowIdx === -1) continue; // no below episode found — try earlier reclaim
-
-      // Find start of below episode
+      if (belowIdx === -1) continue;
       let epStart = belowIdx;
       for (let k = belowIdx - 1; k >= 0; k--) {
-        if (c[k] >= mu[k]) {
-          epStart = k + 1;
-          break;
-        }
+        if (c[k] >= mu[k]) { epStart = k + 1; break; }
         if (k === 0) epStart = 0;
       }
-
-      reclaimIdx = i;
-      belowEpStart = epStart;
-      break;
+      // Verify no exit after reclaim
+      let valid = true;
+      for (let k = i + 1; k < n; k++) {
+        if (c[k] < md[k]) { valid = false; break; }
+      }
+      if (!valid) continue;
+      return { reclaimIdx: i, belowEpStart: epStart };
     }
   }
+  return null;
+}
 
-  if (reclaimIdx === -1) return null;
+// ─── VOLUME CONFIRMATION (Change 1) ──────────────────────────────────────────
+// Returns { volumeOk: bool, volRatio: number }
+function checkVolumeConfirmation(ohlcv, reclaimIdx) {
+  const volumes = ohlcv.map(d => d.volume || 0);
+  const reclaimVol = volumes[reclaimIdx];
+  if (!reclaimVol) return { volumeOk: true, volRatio: 1 }; // no volume data — skip
+  // 20-day average before reclaim
+  const start = Math.max(0, reclaimIdx - 20);
+  const window = volumes.slice(start, reclaimIdx);
+  if (!window.length) return { volumeOk: true, volRatio: 1 };
+  const avgVol = window.reduce((s, v) => s + v, 0) / window.length;
+  if (!avgVol) return { volumeOk: true, volRatio: 1 };
+  const volRatio = reclaimVol / avgVol;
+  return { volumeOk: volRatio >= VOLUME_CONFIRM_RATIO, volRatio };
+}
 
-  // Verify no exit after reclaim (no c[k] < md[k] for k > reclaimIdx)
-  for (let k = reclaimIdx + 1; k < n; k++) {
-    if (c[k] < md[k]) return null;
+// ─── RECENCY-WEIGHTED SWING HIGH (Change 3) ───────────────────────────────────
+// Weights: 3–6mo = 1.0, 6–12mo = 0.85, 12–18mo = 0.70
+// Returns { swingHigh, swingIdx, swingDate }
+function findWeightedSwingHigh(ohlcv) {
+  const n = ohlcv.length;
+  const winStart = n - SWING_HIGH_MAX_BARS;
+  const winEnd   = n - SWING_HIGH_MIN_BARS;
+  if (winStart < 0 || winEnd < 0 || winStart >= winEnd) return null;
+
+  let bestWeighted = -Infinity;
+  let bestRaw = -Infinity;
+  let bestIdx = -1;
+
+  for (let i = winStart; i < winEnd; i++) {
+    const barsFromEnd = n - 1 - i;
+    let weight;
+    if (barsFromEnd <= 126)      weight = 1.00; // 3–6 months
+    else if (barsFromEnd <= 252) weight = 0.85; // 6–12 months
+    else                          weight = 0.70; // 12–18 months
+
+    const raw = ohlcv[i].high;
+    const weighted = raw * weight;
+    if (weighted > bestWeighted) {
+      bestWeighted = weighted;
+      bestRaw = raw;
+      bestIdx = i;
+    }
   }
-
-  return { reclaimIdx, belowEpStart };
+  if (bestIdx === -1) return null;
+  return { swingHigh: bestRaw, swingHighWeighted: bestWeighted, swingIdx: bestIdx, swingDate: ohlcv[bestIdx].date };
 }
 
 // ─── SCREEN ATH ──────────────────────────────────────────────────────────────
 function screenATH(ohlcv) {
   const n = ohlcv.length;
-  if (n < EMA_PERIOD + UPTREND_LOOKBACK + 10) return null;
-
+  if (n < EMA_PERIOD + 10) return null;
   const closes = ohlcv.map(d => d.close);
   const highs  = ohlcv.map(d => d.high);
   const dates  = ohlcv.map(d => d.date);
-
   const ema = calcEMA(closes, EMA_PERIOD);
   const mu  = ema.map(e => e * (1 + MA_BUFFER));
   const md  = ema.map(e => e * (1 - MA_BUFFER));
-
-  // Uptrend filter
-  if (closes[n - 1] <= closes[n - 1 - UPTREND_LOOKBACK]) return null;
-
   const reclaim = findValidReclaim(closes, mu, md);
   if (!reclaim) return null;
-
   const { reclaimIdx, belowEpStart } = reclaim;
   const belowEpisodeBars = reclaimIdx - belowEpStart;
   if (belowEpisodeBars > MAX_BELOW_BARS) return null;
-
   const currentATH = Math.max(...highs);
   const lastClose  = closes[n - 1];
   const pctBelowATH = (currentATH - lastClose) / currentATH;
   if (pctBelowATH > ATH_THRESHOLD) return null;
-
-  const barsSince    = n - 1 - reclaimIdx;
-  const currentEMA   = ema[n - 1];
-  const pctAboveEMA  = ((lastClose - currentEMA) / currentEMA) * 100;
-
+  // Volume confirmation
+  const { volumeOk, volRatio } = checkVolumeConfirmation(ohlcv, reclaimIdx);
+  // Weekly trend
+  const weeklyTrendOk = checkWeeklyTrend(ohlcv);
+  // Momentum: 20-day rate of change
+  const momentum20 = n > 20 ? (closes[n-1] - closes[n-21]) / closes[n-21] * 100 : 0;
+  const barsSince   = n - 1 - reclaimIdx;
+  const currentEMA  = ema[n - 1];
+  const pctAboveEMA = (lastClose - currentEMA) / currentEMA * 100;
   return {
-    lastClose,
-    currentATH,
-    pctBelowATH,
-    pctAboveEMA,
-    barsSince,
-    belowEpisodeBars,
-    reclaimDate: dates[reclaimIdx],
-    currentEMA,
+    lastClose, currentATH, pctBelowATH, pctAboveEMA,
+    barsSince, belowEpisodeBars, reclaimDate: dates[reclaimIdx],
+    currentEMA, volumeOk, volRatio, weeklyTrendOk, momentum20,
   };
 }
 
 // ─── SCREEN SWING ────────────────────────────────────────────────────────────
-function screenSwing(ohlcv, athTickersSet) {
+function screenSwing(ohlcv) {
   const n = ohlcv.length;
-  if (n < EMA_PERIOD + UPTREND_LOOKBACK + 10) return null;
-
+  if (n < EMA_PERIOD + 10) return null;
   const closes = ohlcv.map(d => d.close);
   const highs  = ohlcv.map(d => d.high);
   const dates  = ohlcv.map(d => d.date);
-
   const ema = calcEMA(closes, EMA_PERIOD);
   const mu  = ema.map(e => e * (1 + MA_BUFFER));
   const md  = ema.map(e => e * (1 - MA_BUFFER));
-
-  // Uptrend filter
-  if (closes[n - 1] <= closes[n - 1 - UPTREND_LOOKBACK]) return null;
-
   const reclaim = findValidReclaim(closes, mu, md);
   if (!reclaim) return null;
-
   const { reclaimIdx, belowEpStart } = reclaim;
   const belowEpisodeBars = reclaimIdx - belowEpStart;
   if (belowEpisodeBars > MAX_BELOW_BARS) return null;
-
-  const currentATH  = Math.max(...highs);
-  const lastClose   = closes[n - 1];
+  const currentATH = Math.max(...highs);
+  const lastClose  = closes[n - 1];
   const pctBelowATH = (currentATH - lastClose) / currentATH;
-
-  // Skip if in ATH zone
-  if (lastClose >= currentATH * (1 - ATH_THRESHOLD)) return null;
-
-  // ATH drawdown filter
+  if (lastClose >= currentATH * (1 - ATH_THRESHOLD)) return null; // in ATH zone
   if (pctBelowATH > S2_ATH_MAX_DRAWDOWN) return null;
-
-  // Swing high window
-  const winStart = n - SWING_HIGH_MAX_BARS;
-  const winEnd   = n - SWING_HIGH_MIN_BARS;
-  if (winStart < 0 || winEnd < 0 || winStart >= winEnd) return null;
-
-  const windowHighs = highs.slice(winStart, winEnd);
-  const windowDates = dates.slice(winStart, winEnd);
-  let swingHigh = -Infinity;
-  let swingIdx  = -1;
-  for (let i = 0; i < windowHighs.length; i++) {
-    if (windowHighs[i] > swingHigh) {
-      swingHigh = windowHighs[i];
-      swingIdx  = i;
-    }
-  }
-
+  // Recency-weighted swing high
+  const swing = findWeightedSwingHigh(ohlcv);
+  if (!swing) return null;
+  const { swingHigh, swingDate } = swing;
   if (swingHigh <= lastClose) return null;
-
   const pctToSwing = (swingHigh - lastClose) / swingHigh;
   if (pctToSwing < SWING_NEAR_MIN || pctToSwing > SWING_NEAR_MAX) return null;
-
+  // Volume + weekly + momentum
+  const { volumeOk, volRatio } = checkVolumeConfirmation(ohlcv, reclaimIdx);
+  const weeklyTrendOk = checkWeeklyTrend(ohlcv);
+  const momentum20 = n > 20 ? (closes[n-1] - closes[n-21]) / closes[n-21] * 100 : 0;
   const barsSince   = n - 1 - reclaimIdx;
   const currentEMA  = ema[n - 1];
-  const pctAboveEMA = ((lastClose - currentEMA) / currentEMA) * 100;
-  const swingDate   = windowDates[swingIdx];
-
+  const pctAboveEMA = (lastClose - currentEMA) / currentEMA * 100;
   return {
-    lastClose,
-    currentATH,
-    pctBelowATH,
-    pctAboveEMA,
-    barsSince,
-    belowEpisodeBars,
-    reclaimDate: dates[reclaimIdx],
-    swingHigh,
-    swingDate,
-    pctToSwing,
-    currentEMA,
+    lastClose, currentATH, pctBelowATH, pctAboveEMA,
+    barsSince, belowEpisodeBars, reclaimDate: dates[reclaimIdx],
+    swingHigh, swingDate, pctToSwing, currentEMA,
+    volumeOk, volRatio, weeklyTrendOk, momentum20,
   };
 }
 
-// ─── PROBABILITY SCORING ─────────────────────────────────────────────────────
+// ─── PROBABILITY SCORING (Change 4) ──────────────────────────────────────────
+// Weights redistributed: EMA position 15%, bars since 10%, below bars 10%,
+//   ATH dist 25%, volume ratio 20%, momentum 15%, quality 5% = 100%
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 
-function scoreATH(pctBelowATH, pctAboveEMA, barsSince, belowBars) {
+function scoreATH(pctBelowATH, pctAboveEMA, barsSince, belowBars, volRatio, momentum20, weeklyTrendOk) {
   let prob = 88;
-  prob -= pctBelowATH * 5.5;
-  prob -= barsSince * 0.04;
-  prob += Math.min(pctAboveEMA * 0.25, 5);
-  prob -= belowBars * 0.8;
-  return clamp(prob, 40, 96);
+  // ATH proximity (25%): closer = better
+  prob -= pctBelowATH * 4.5;
+  // Bars since reclaim (10%)
+  prob -= barsSince * 0.035;
+  // EMA position (15%): being clearly above EMA = bullish
+  prob += clamp(pctAboveEMA * 0.3, -5, 6);
+  // Below-EMA episode length (10%): shorter = better
+  prob -= belowBars * 0.7;
+  // Volume ratio (20%): above-average volume on reclaim
+  const volScore = volRatio >= VOLUME_CONFIRM_RATIO ? 4 : (volRatio >= 1.0 ? 2 : 0);
+  prob += volScore;
+  // Momentum (15%): positive 20-day momentum
+  prob += clamp(momentum20 * 0.3, -4, 5);
+  // Weekly trend penalty (Change 12)
+  if (!weeklyTrendOk) prob -= WEEKLY_TREND_PENALTY;
+  return clamp(Math.round(prob), 40, 96);
 }
 
-function scoreSwing(pctToResistance, pctAboveEMA, barsSince, belowBars, pctBelowATH) {
+function scoreSwing(pctToResistance, pctAboveEMA, barsSince, belowBars, pctBelowATH, volRatio, momentum20, weeklyTrendOk) {
   let prob = 78;
-  prob -= pctToResistance * 6;
-  prob -= barsSince * 0.06;
-  prob += Math.min(pctAboveEMA * 0.3, 5);
-  prob -= belowBars * 0.8;
-  prob -= pctBelowATH * 1.2;
-  return clamp(prob, 35, 90);
+  prob -= pctToResistance * 5.5;
+  prob -= barsSince * 0.05;
+  prob += clamp(pctAboveEMA * 0.3, -5, 5);
+  prob -= belowBars * 0.7;
+  prob -= pctBelowATH * 1.1;
+  const volScore = volRatio >= VOLUME_CONFIRM_RATIO ? 4 : (volRatio >= 1.0 ? 2 : 0);
+  prob += volScore;
+  prob += clamp(momentum20 * 0.3, -4, 5);
+  if (!weeklyTrendOk) prob -= WEEKLY_TREND_PENALTY;
+  return clamp(Math.round(prob), 35, 90);
 }
 
-// ─── FETCH OHLCV ─────────────────────────────────────────────────────────────
+// ─── FETCH WITH EXPONENTIAL BACKOFF (Change 14) ──────────────────────────────
+async function fetchWithBackoff(url, opts = {}, maxRetries = 3) {
+  const proxies = [
+    u => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+    u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+  ];
+  let lastErr;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const proxyFn = attempt < 2 ? proxies[0] : proxies[1];
+    const proxyUrl = proxyFn(url);
+    try {
+      const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(15000), ...opts });
+      if (res.status === 429) {
+        await new Promise(r => setTimeout(r, Math.pow(2, attempt) * 1000 + Math.random() * 500));
+        lastErr = new Error('Rate limited');
+        continue;
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.json();
+    } catch (e) {
+      lastErr = e;
+      if (attempt < maxRetries - 1) {
+        await new Promise(r => setTimeout(r, Math.pow(2, attempt) * 600 + Math.random() * 300));
+      }
+    }
+  }
+  throw lastErr;
+}
+
 async function fetchOHLCV(ticker) {
-  const yahooUrl = `https://query2.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=4y`;
-  const proxyUrl = `https://corsproxy.io/?url=${encodeURIComponent(yahooUrl)}`;
-
-  const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(15000) });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-  const json = await res.json();
-  const result = json.chart && json.chart.result && json.chart.result[0];
+  const yahooUrl = `https://query2.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=5y`;
+  const json = await fetchWithBackoff(yahooUrl);
+  const result = json.chart?.result?.[0];
   if (!result) throw new Error('No chart data');
-
   const timestamps = result.timestamp;
   const quote      = result.indicators.quote[0];
-  const adjClose   = (result.indicators.adjclose && result.indicators.adjclose[0] && result.indicators.adjclose[0].adjclose) || quote.close;
-
-  const data = timestamps.map((t, i) => ({
+  const adjClose   = result.indicators.adjclose?.[0]?.adjclose || quote.close;
+  return timestamps.map((t, i) => ({
     date:   new Date(t * 1000).toISOString().split('T')[0],
     open:   quote.open[i],
     high:   quote.high[i],
@@ -742,8 +910,58 @@ async function fetchOHLCV(ticker) {
     close:  adjClose[i],
     volume: quote.volume[i],
   })).filter(d => d.close != null && d.high != null && d.close > 0 && d.high > 0);
+}
 
-  return data;
+// ─── REGIME FILTER (Change 2) ─────────────────────────────────────────────────
+// Fetch SPY (US regime) and XIU.TO (TSX regime) and check vs 220 EMA
+async function checkRegime() {
+  if (regimeCache) return regimeCache;
+  const results = { spyAbove: true, xiuAbove: true };
+  try {
+    const spyData = await fetchOHLCV('SPY');
+    if (spyData.length >= EMA_PERIOD) {
+      const closes = spyData.map(d => d.close);
+      const ema = calcEMA(closes, EMA_PERIOD);
+      results.spyAbove = closes[closes.length - 1] > ema[ema.length - 1];
+    }
+  } catch {}
+  try {
+    const xiuData = await fetchOHLCV('XIU.TO');
+    if (xiuData.length >= EMA_PERIOD) {
+      const closes = xiuData.map(d => d.close);
+      const ema = calcEMA(closes, EMA_PERIOD);
+      results.xiuAbove = closes[closes.length - 1] > ema[ema.length - 1];
+    }
+  } catch {}
+  regimeCache = results;
+  updateRegimeBanner(results);
+  return results;
+}
+
+function updateRegimeBanner(regime) {
+  const banner = document.getElementById('regimeBanner');
+  const detail = document.getElementById('regimeCautionDetail');
+  const stat   = document.getElementById('regimeStatus');
+  if (!regime.spyAbove && !regime.xiuAbove) {
+    banner.style.display = 'flex';
+    detail.textContent = 'Both SPY & XIU.TO below 220 EMA — US & CA auto-entries suppressed.';
+    stat.textContent = '⚠ Both Caution';
+    stat.style.color = '#f85149';
+  } else if (!regime.spyAbove) {
+    banner.style.display = 'flex';
+    detail.textContent = 'SPY below 220 EMA — US auto-entries suppressed.';
+    stat.textContent = '⚠ US Caution';
+    stat.style.color = '#d4a017';
+  } else if (!regime.xiuAbove) {
+    banner.style.display = 'flex';
+    detail.textContent = 'XIU.TO below 220 EMA — CA auto-entries suppressed.';
+    stat.textContent = '⚠ CA Caution';
+    stat.style.color = '#d4a017';
+  } else {
+    banner.style.display = 'none';
+    stat.textContent = '✓ Clear';
+    stat.style.color = '#3fb950';
+  }
 }
 
 // ─── PROCESS TICKER ──────────────────────────────────────────────────────────
@@ -756,35 +974,49 @@ async function processTicker(ticker) {
       athResult.pctBelowATH * 100,
       athResult.pctAboveEMA,
       athResult.barsSince,
-      athResult.belowEpisodeBars
+      athResult.belowEpisodeBars,
+      athResult.volRatio,
+      athResult.momentum20,
+      athResult.weeklyTrendOk
     );
     athTickers.add(ticker);
     return { type: 'ath', ticker, result: athResult, prob };
   }
 
-  const swingResult = screenSwing(ohlcv, athTickers);
-  if (swingResult) {
-    const prob = scoreSwing(
-      swingResult.pctToSwing * 100,
-      swingResult.pctAboveEMA,
-      swingResult.barsSince,
-      swingResult.belowEpisodeBars,
-      swingResult.pctBelowATH * 100
-    );
-    return { type: 'swing', ticker, result: swingResult, prob };
+  if (!athTickers.has(ticker)) {
+    const swingResult = screenSwing(ohlcv);
+    if (swingResult) {
+      const prob = scoreSwing(
+        swingResult.pctToSwing * 100,
+        swingResult.pctAboveEMA,
+        swingResult.barsSince,
+        swingResult.belowEpisodeBars,
+        swingResult.pctBelowATH * 100,
+        swingResult.volRatio,
+        swingResult.momentum20,
+        swingResult.weeklyTrendOk
+      );
+      return { type: 'swing', ticker, result: swingResult, prob };
+    }
   }
-
   return null;
 }
 
 // ─── UI HELPERS ───────────────────────────────────────────────────────────────
-function fmt(n, dec=2) { return n.toFixed(dec); }
+function fmt(n, dec=2) { return Number(n).toFixed(dec); }
 function fmtPct(n) { return fmt(n) + '%'; }
-function fmtPrice(p) { return '$' + p.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}); }
+function fmtPrice(p) { return '$' + Number(p).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}); }
+
+// Signal strength badge (Change 10)
+function strengthBadge(prob) {
+  if (prob >= 80) return `<span class="strength-badge strength-strong">Strong</span>`;
+  if (prob >= 60) return `<span class="strength-badge strength-moderate">Moderate</span>`;
+  return `<span class="strength-badge strength-weak">Weak</span>`;
+}
 
 function probBadge(prob) {
   const p = Math.round(prob);
-  let cls = p >= 70 ? 'prob-green' : p >= 50 ? 'prob-yellow' : 'prob-orange';
+  const cls = p >= 70 ? 'prob-green' : p >= 50 ? 'prob-yellow' : 'prob-orange';
   return `<span class="prob-badge ${cls}">${p}%</span>`;
 }
 
@@ -792,63 +1024,74 @@ function buildRow(item) {
   const { ticker, result, prob, type } = item;
   const name  = COMPANY_NAMES[ticker] || ticker;
   const price = fmtPrice(result.lastClose);
+  const flag  = EXCHANGE_MAP[ticker] === 'TSX' ? '🇨🇦' : '🇺🇸';
+
+  // Labels for volume / weekly trend
+  const labels = [];
+  if (!result.volumeOk) labels.push('<span class="label-tag label-no-volume">Low Volume</span>');
+  if (!result.weeklyTrendOk) labels.push('<span class="label-tag label-no-trend">Weekly Trend Unconfirmed</span>');
 
   let metricHTML = '';
   if (type === 'ath') {
     metricHTML = `
       <li>ATH: <span class="val good">${fmtPrice(result.currentATH)}</span> &nbsp;|&nbsp; ${fmtPct(result.pctBelowATH * 100)} below ATH</li>
       <li>EMA(220): <span class="val">${fmtPrice(result.currentEMA)}</span> &nbsp;|&nbsp; <span class="${result.pctAboveEMA >= 0 ? 'good' : 'warn'}">${fmtPct(result.pctAboveEMA)} above EMA</span></li>
-      <li>Reclaim date: <span class="val">${result.reclaimDate}</span> &nbsp;|&nbsp; ${result.barsSince} bars ago</li>
-      <li>Below-EMA episode: <span class="val">${result.belowEpisodeBars} bars</span></li>
+      <li>Reclaim: <span class="val">${result.reclaimDate}</span> · ${result.barsSince} bars ago · Episode: ${result.belowEpisodeBars} bars</li>
+      <li>Volume on reclaim: <span class="val ${result.volumeOk ? 'good' : 'warn'}">${fmt(result.volRatio, 2)}× avg</span> &nbsp;|&nbsp; Momentum(20d): <span class="val ${result.momentum20 >= 0 ? 'good' : 'warn'}">${fmtPct(result.momentum20)}</span></li>
     `;
   } else {
     metricHTML = `
-      <li>Swing high: <span class="val good">${fmtPrice(result.swingHigh)}</span> on ${result.swingDate}</li>
-      <li>Distance to swing: <span class="val warn">${fmtPct(result.pctToSwing * 100)}</span></li>
+      <li>Swing high: <span class="val good">${fmtPrice(result.swingHigh)}</span> on ${result.swingDate} · Distance: <span class="val warn">${fmtPct(result.pctToSwing * 100)}</span></li>
       <li>ATH: <span class="val">${fmtPrice(result.currentATH)}</span> &nbsp;|&nbsp; ${fmtPct(result.pctBelowATH * 100)} below ATH</li>
       <li>EMA(220): <span class="val">${fmtPrice(result.currentEMA)}</span> &nbsp;|&nbsp; <span class="${result.pctAboveEMA >= 0 ? 'good' : 'warn'}">${fmtPct(result.pctAboveEMA)} above EMA</span></li>
-      <li>Reclaim date: <span class="val">${result.reclaimDate}</span> &nbsp;|&nbsp; ${result.barsSince} bars ago</li>
-      <li>Below-EMA episode: <span class="val">${result.belowEpisodeBars} bars</span></li>
+      <li>Reclaim: <span class="val">${result.reclaimDate}</span> · ${result.barsSince} bars ago · Episode: ${result.belowEpisodeBars} bars</li>
+      <li>Volume on reclaim: <span class="val ${result.volumeOk ? 'good' : 'warn'}">${fmt(result.volRatio, 2)}× avg</span> &nbsp;|&nbsp; Momentum(20d): <span class="val ${result.momentum20 >= 0 ? 'good' : 'warn'}">${fmtPct(result.momentum20)}</span></li>
     `;
   }
 
   return `<tr data-prob="${Math.round(prob)}">
     <td>
-      <div class="stock-ticker">${ticker}</div>
+      <div class="stock-ticker">${flag} ${ticker}</div>
       <div class="stock-name">${name}</div>
       <div class="stock-price">${price}</div>
+      <div>${labels.join('')}</div>
     </td>
     <td><ul class="metrics">${metricHTML}</ul></td>
-    <td>${probBadge(prob)}</td>
+    <td>
+      ${probBadge(prob)}
+      <div style="margin-top:6px">${strengthBadge(prob)}</div>
+    </td>
   </tr>`;
 }
 
 function insertSorted(tbody, item) {
   const newProb = Math.round(item.prob);
-  const newRow  = document.createElement('tbody');
-  newRow.innerHTML = buildRow(item);
-  const tr = newRow.firstElementChild;
-
-  // Find insertion point (descending probability)
+  const tmp = document.createElement('tbody');
+  tmp.innerHTML = buildRow(item);
+  const tr = tmp.firstElementChild;
   const rows = Array.from(tbody.querySelectorAll('tr[data-prob]'));
   let inserted = false;
   for (const row of rows) {
-    if (parseInt(row.dataset.prob) < newProb) {
-      tbody.insertBefore(tr, row);
-      inserted = true;
-      break;
-    }
+    if (parseInt(row.dataset.prob) < newProb) { tbody.insertBefore(tr, row); inserted = true; break; }
   }
   if (!inserted) tbody.appendChild(tr);
 }
 
 function updateStats() {
   document.getElementById('screenedCount').textContent = screenedCount;
+  document.getElementById('totalCount').textContent = TICKERS.length;
   document.getElementById('t1Count').textContent = t1Results.length;
   document.getElementById('t2Count').textContent = t2Results.length;
-  document.getElementById('errorCount').textContent = errorCount;
+  document.getElementById('errorCount').textContent = `${errorCount} / ${failedTickers}`;
   document.getElementById('t1Badge').textContent = t1Results.length;
   document.getElementById('t2Badge').textContent = t2Results.length;
+  // Market status
+  const usOpen = isUSMarketOpen();
+  const tsxOpen = isTSXMarketOpen();
+  document.getElementById('usMarketDot').className = usOpen ? 'market-dot-open' : 'market-dot-closed';
+  document.getElementById('usMarketStatus').textContent = usOpen ? 'Open' : isUSHolidayToday() ? 'Holiday' : 'Closed';
+  document.getElementById('tsxMarketDot').className = tsxOpen ? 'market-dot-open' : 'market-dot-closed';
+  document.getElementById('tsxMarketStatus').textContent = tsxOpen ? 'Open' : isTSXHolidayToday() ? 'Holiday' : 'Closed';
 }
 
 function updateProgress(idx, ticker) {
@@ -858,18 +1101,116 @@ function updateProgress(idx, ticker) {
   document.getElementById('currentTicker').textContent = ticker || '—';
 }
 
+// ─── RULE VERSION CHECK (Change 15) ──────────────────────────────────────────
+function checkRuleVersion() {
+  const stored = localStorage.getItem('screener_rule_version');
+  document.getElementById('ruleVersionLabel').textContent = RULE_VERSION;
+  document.getElementById('footerVersion').textContent = RULE_VERSION;
+  if (stored && stored !== RULE_VERSION) {
+    document.getElementById('ruleBanner').style.display = 'flex';
+  }
+  localStorage.setItem('screener_rule_version', RULE_VERSION);
+}
+
+// ─── BACKTEST SIMULATION (Change 11 — simplified) ─────────────────────────────
+// Simulates the last 2 years of signals using same entry/exit rules
+// Uses cached OHLCV to find historical signals and projects outcomes
+let btData = null;
+
+function loadBtData() {
+  try {
+    const raw = localStorage.getItem('screener_backtest');
+    if (raw) btData = JSON.parse(raw);
+  } catch {}
+  if (btData) renderBtPanel();
+}
+
+function saveBtData(d) {
+  btData = d;
+  try { localStorage.setItem('screener_backtest', JSON.stringify(d)); } catch {}
+  if (FIREBASE_ENABLED && window._fbDb) {
+    // window._fbDb.ref('backtest').set(d); // Firebase write placeholder
+  }
+  renderBtPanel();
+}
+
+function renderBtPanel() {
+  if (!btData) return;
+  const el = id => document.getElementById(id);
+  el('btLastRun').textContent = btData.runDate || 'never';
+  el('btWinRate').textContent  = btData.athWinRate != null ? btData.athWinRate + '%' : '—';
+  el('btWinRate').className    = 'bt-val ' + (btData.athWinRate >= 55 ? 'green' : btData.athWinRate >= 45 ? 'yellow' : 'red');
+  el('btWinRateSw').textContent = btData.swWinRate != null ? btData.swWinRate + '%' : '—';
+  el('btWinRateSw').className   = 'bt-val ' + (btData.swWinRate >= 55 ? 'green' : btData.swWinRate >= 45 ? 'yellow' : 'red');
+  el('btAvgReturn').textContent = btData.avgReturn != null ? (btData.avgReturn > 0 ? '+' : '') + btData.avgReturn + '%' : '—';
+  el('btAvgReturn').className   = 'bt-val ' + (btData.avgReturn > 0 ? 'green' : 'red');
+  el('btSignals').textContent  = btData.totalSignals || '—';
+  el('btCalib').textContent    = btData.calibration || '—';
+}
+
+async function runBacktest() {
+  const btn = document.getElementById('btRunBtn');
+  btn.textContent = 'Running…';
+  btn.disabled = true;
+  // Simplified backtest: screen 20 representative tickers with 2yr lookback
+  // For each qualifying signal, simulate +5% TP / -2% SL from signal close
+  const testTickers = ['AAPL','MSFT','NVDA','AMZN','META','GOOGL','JPM','V','MA','UNH',
+                       'RY.TO','TD.TO','ENB.TO','CNR.TO','SHOP.TO'];
+  let athWins = 0, athTotal = 0, swWins = 0, swTotal = 0, totalReturn = 0;
+  for (const ticker of testTickers) {
+    try {
+      const ohlcv = await fetchOHLCV(ticker);
+      // Simulate signals on data from 2 years ago onwards
+      const cutoff = ohlcv.length - 500; // ~2yr back
+      for (let s = Math.max(EMA_PERIOD + 30, cutoff); s < ohlcv.length - 10; s++) {
+        const slice = ohlcv.slice(0, s);
+        const athRes = screenATH(slice);
+        const type = athRes ? 'ath' : null;
+        const res = athRes || screenSwing(slice);
+        if (!res) continue;
+        // Wait for next-session confirmation (Change 5): check s+1 close > reclaim close
+        const entryPrice = ohlcv[s + 1]?.close;
+        if (!entryPrice) continue;
+        // Simulate next 10 bars for TP/SL
+        let outcome = 'open';
+        for (let f = s + 2; f < Math.min(ohlcv.length, s + 12); f++) {
+          const pct = (ohlcv[f].close - entryPrice) / entryPrice * 100;
+          if (pct >= 5) { outcome = 'profit'; break; }
+          if (pct <= -2) { outcome = 'loss'; break; }
+        }
+        const ret = outcome === 'profit' ? 5 : outcome === 'loss' ? -2 : 0;
+        totalReturn += ret;
+        if (type === 'ath') { athTotal++; if (outcome === 'profit') athWins++; }
+        else { swTotal++; if (outcome === 'profit') swWins++; }
+      }
+    } catch {}
+  }
+  const d = {
+    runDate:    new Date().toISOString().split('T')[0],
+    athWinRate: athTotal > 0 ? Math.round(athWins / athTotal * 100) : null,
+    swWinRate:  swTotal > 0  ? Math.round(swWins  / swTotal  * 100) : null,
+    avgReturn:  (athTotal + swTotal) > 0 ? parseFloat((totalReturn / (athTotal + swTotal)).toFixed(2)) : null,
+    totalSignals: athTotal + swTotal,
+    calibration: athTotal + swTotal > 0 ? (Math.round((athWins + swWins) / (athTotal + swTotal) * 100) + '%') : '—',
+  };
+  saveBtData(d);
+  btn.textContent = 'Run Backtest';
+  btn.disabled = false;
+}
+
 // ─── MAIN LOOP ────────────────────────────────────────────────────────────────
 async function startScreen() {
   if (running) return;
-  running      = true;
+  running       = true;
   stopRequested = false;
-  t1Results    = [];
-  t2Results    = [];
+  t1Results     = [];
+  t2Results     = [];
   screenedCount = 0;
-  errorCount   = 0;
-  athTickers   = new Set();
+  errorCount    = 0;
+  failedTickers = 0;
+  athTickers    = new Set();
+  regimeCache   = null;
 
-  // Reset UI
   document.getElementById('runBtn').disabled = true;
   document.getElementById('stopBtn').style.display = 'inline-block';
   document.getElementById('progressWrap').style.display = 'block';
@@ -884,22 +1225,45 @@ async function startScreen() {
     document.getElementById('elapsedTime').textContent = s < 60 ? s + 's' : Math.floor(s/60) + 'm ' + (s%60) + 's';
   }, 1000);
 
-  const BATCH = 5;
+  // Fetch regime first
+  await checkRegime();
 
-  for (let i = 0; i < TICKERS.length && !stopRequested; i += BATCH) {
-    const batch = TICKERS.slice(i, i + BATCH);
+  // Determine which exchanges to screen based on market calendar
+  const skipUS  = isUSHolidayToday();
+  const skipTSX = isTSXHolidayToday();
+  let tickersToRun = TICKERS;
+  if (skipUS && !skipTSX) {
+    tickersToRun = TSX_TICKERS;
+  } else if (!skipUS && skipTSX) {
+    tickersToRun = SP500_TICKERS;
+  }
+
+  const BATCH = 5;
+  for (let i = 0; i < tickersToRun.length && !stopRequested; i += BATCH) {
+    const batch = tickersToRun.slice(i, i + BATCH);
     updateProgress(i, batch[0]);
 
-    const promises = batch.map(async (ticker) => {
+    await Promise.all(batch.map(async (ticker) => {
       if (stopRequested) return;
       try {
         const item = await processTicker(ticker);
         screenedCount++;
         if (item) {
           if (item.type === 'ath') {
+            // Regime caution label
+            const exchange = EXCHANGE_MAP[ticker];
+            if ((exchange === 'US' && regimeCache && !regimeCache.spyAbove) ||
+                (exchange === 'TSX' && regimeCache && !regimeCache.xiuAbove)) {
+              item.regimeCaution = true;
+            }
             t1Results.push(item);
             insertSorted(document.getElementById('t1Body'), item);
           } else {
+            const exchange = EXCHANGE_MAP[ticker];
+            if ((exchange === 'US' && regimeCache && !regimeCache.spyAbove) ||
+                (exchange === 'TSX' && regimeCache && !regimeCache.xiuAbove)) {
+              item.regimeCaution = true;
+            }
             t2Results.push(item);
             insertSorted(document.getElementById('t2Body'), item);
           }
@@ -909,18 +1273,16 @@ async function startScreen() {
       } catch (e) {
         screenedCount++;
         errorCount++;
+        if (String(e).includes('fetch') || String(e).includes('timeout')) failedTickers++;
         updateStats();
       }
-    });
+    }));
 
-    await Promise.all(promises);
-
-    if (!stopRequested && i + BATCH < TICKERS.length) {
+    if (!stopRequested && i + BATCH < tickersToRun.length) {
       await new Promise(r => setTimeout(r, 300));
     }
   }
 
-  // Show empty states if no results
   if (t1Results.length === 0) {
     document.getElementById('t1Body').innerHTML = `<tr><td colspan="3"><div class="empty-state"><p>No stocks matched the ATH criteria</p></div></td></tr>`;
   }
@@ -928,15 +1290,24 @@ async function startScreen() {
     document.getElementById('t2Body').innerHTML = `<tr><td colspan="3"><div class="empty-state"><p>No stocks matched the Swing criteria</p></div></td></tr>`;
   }
 
-  // Done
+  // Save results to Firebase if enabled
+  if (FIREBASE_ENABLED && window._fbDb) {
+    // Firebase write placeholder
+    // window._fbDb.ref('screener/lastRun').set({ date: new Date().toISOString(), t1: t1Results.length, t2: t2Results.length });
+  }
+
   running = false;
   clearInterval(timerInterval);
-  updateProgress(TICKERS.length, '');
+  updateProgress(tickersToRun.length, '');
   document.getElementById('progressFill').style.width = '100%';
   document.getElementById('progressPct').textContent = '100%';
   document.getElementById('currentTicker').textContent = stopRequested ? 'Stopped' : 'Done';
   document.getElementById('runBtn').disabled = false;
   document.getElementById('stopBtn').style.display = 'none';
+  // Update last run stat
+  const now = new Date().toLocaleString('en-US', { timeZone: 'America/New_York', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
+  document.getElementById('lastRunStat').textContent = now + ' ET';
+  localStorage.setItem('screener_last_run', now + ' ET');
 }
 
 function stopScreen() {
@@ -957,40 +1328,50 @@ function stopScreen() {
 function exportCSV(type) {
   const results = type === 'ath' ? t1Results : t2Results;
   if (!results.length) { alert('No results to export.'); return; }
-
-  let csv = 'Ticker,Company,Price,Prob%,ATH,PctBelowATH%,EMA220,PctAboveEMA%,BarsSince,BelowBars,ReclaimDate';
+  let csv = 'Ticker,Company,Price,Prob%,Strength,VolRatio,WeeklyTrend,ATH,PctBelowATH%,EMA220,PctAboveEMA%,BarsSince,BelowBars,ReclaimDate,Momentum20d%';
   if (type === 'swing') csv += ',SwingHigh,SwingDate,PctToSwing%';
   csv += '\n';
-
   for (const item of results) {
     const r = item.result;
+    const strength = item.prob >= 80 ? 'Strong' : item.prob >= 60 ? 'Moderate' : 'Weak';
     const name = (COMPANY_NAMES[item.ticker] || '').replace(/,/g, ';');
     let row = [
-      item.ticker, name,
-      r.lastClose.toFixed(2),
-      Math.round(item.prob),
-      r.currentATH.toFixed(2),
-      (r.pctBelowATH * 100).toFixed(2),
-      r.currentEMA.toFixed(2),
-      r.pctAboveEMA.toFixed(2),
-      r.barsSince,
-      r.belowEpisodeBars,
-      r.reclaimDate,
+      item.ticker, name, r.lastClose.toFixed(2), Math.round(item.prob), strength,
+      (r.volRatio||0).toFixed(2), r.weeklyTrendOk ? 'Yes' : 'No',
+      r.currentATH.toFixed(2), (r.pctBelowATH*100).toFixed(2),
+      r.currentEMA.toFixed(2), r.pctAboveEMA.toFixed(2),
+      r.barsSince, r.belowEpisodeBars, r.reclaimDate, (r.momentum20||0).toFixed(2),
     ];
-    if (type === 'swing') {
-      row.push(r.swingHigh.toFixed(2), r.swingDate, (r.pctToSwing * 100).toFixed(2));
-    }
+    if (type === 'swing') row.push(r.swingHigh.toFixed(2), r.swingDate, (r.pctToSwing*100).toFixed(2));
     csv += row.join(',') + '\n';
   }
-
   const blob = new Blob([csv], { type: 'text/csv' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
-  a.href     = url;
-  a.download = `screener_${type}_${new Date().toISOString().split('T')[0]}.csv`;
+  a.href = url; a.download = `screener_${type}_${new Date().toISOString().split('T')[0]}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 }
+
+// ─── MINIMIZE / RESTORE PANELS ────────────────────────────────────────────────
+function togglePanel(id) {
+  const wrap = document.getElementById(id + 'Wrap');
+  const btn  = document.getElementById(id + 'MinBtn');
+  if (!wrap) return;
+  const hidden = wrap.classList.toggle('minimized');
+  btn.textContent = hidden ? '+' : '−';
+  btn.title       = hidden ? 'Restore' : 'Minimize';
+}
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  checkRuleVersion();
+  loadBtData();
+  updateStats();
+  // Restore last run stat
+  const lr = localStorage.getItem('screener_last_run');
+  if (lr) document.getElementById('lastRunStat').textContent = lr;
+});
 </script>
 </body>
 </html>

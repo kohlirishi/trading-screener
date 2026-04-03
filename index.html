@@ -681,7 +681,10 @@ function migrate() {
 let STATE = (() => {
   try {
     const v3 = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    if (v3) return v3;
+    if (v3) {
+      v3.totalCapital = TOTAL_CAPITAL; // always enforce current constant
+      return v3;
+    }
     return migrate() || defaultState();
   } catch { return defaultState(); }
 })();
@@ -1462,6 +1465,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Try Firebase first to fix stale Chrome cache — overwrite localStorage if Firebase has newer data
   const fbState = await loadStateFromFirebase();
   if (fbState && fbState.trades !== undefined) {
+    fbState.totalCapital = TOTAL_CAPITAL; // always enforce current constant
     STATE = fbState;
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(STATE)); } catch {}
   }

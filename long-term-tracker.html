@@ -549,106 +549,45 @@ async function fetchFundamentals(ticker) {
   return null; // all 4 attempts failed
 }
 
-// ─── TRADINGVIEW SCANNER API — Bulk Fundamental Data ─────────────────────────
-// Same internal API that powers TradingView's own screener. Free, no auth,
-// fetches ALL tickers in 2 requests (US + CA) instead of 500+ Yahoo calls.
-const TV_FUND_COLUMNS = [
-  'market_cap_basic',                          // Market Cap USD
-  'price_earnings_ttm',                         // P/E TTM
-  'return_on_equity',                           // ROE TTM  (decimal → ×100)
-  'earnings_per_share_diluted_yoy_growth_ttm',  // EPS Growth TTM YoY (decimal → ×100)
-  'free_cash_flow',                             // FCF TTM (currency units)
-  'gross_profit_margin_annual',                 // Gross Margin FY (decimal → ×100)
-  'revenue_growth_ttm',                         // Revenue Growth TTM (decimal → ×100)
-  'Perf.5Y',                                    // 5Y Performance (already in %)
-];
+// ─── FMP CONFIG — Financial Modeling Prep ────────────────────────────────────
+// Free API key at financialmodelingprep.com — email only, no credit card.
+// 250 requests/day free. We only call FMP for tickers that pass ALL technical
+// filters (typically 10–30 out of 500+), so ~40–60 FMP requests per run.
+const FMP_API_KEY = 'Zi6Ma3nNfm9v0dVMXPtsJwDLcMjlOWoN';
+const FMP_ENABLED = true;
 
-let tvFundCache = null; // populated once per screen run
+async function fetchFMPFundamentals(ticker) {
+  if (!FMP_ENABLED) return null;
+  const sym  = ticker.replace('.TO', ''); // FMP uses RY, not RY.TO
+  const base = 'https://financialmodelingprep.com/api/v3';
+  const auth = `apikey=${FMP_API_KEY}`;
+  try {
+    // 2 parallel requests per ticker: key-metrics (MCap, P/E, ROE, FCF) + income stmt (GrMgn, EPS growth)
+    const [kmRes, isRes] = await Promise.all([
+      fetch(`${base}/key-metrics-ttm/${sym}?${auth}`,                        { signal: AbortSignal.timeout(12000) }),
+      fetch(`${base}/income-statement/${sym}?limit=2&period=annual&${auth}`, { signal: AbortSignal.timeout(12000) }),
+    ]);
+    const km = kmRes.ok ? (await kmRes.json())?.[0] : null;
+    const is = isRes.ok ? (await isRes.json())       : null;
+    if (!km) { console.warn(`FMP ${ticker}: no key-metrics data`); return null; }
 
-async function fetchAllTVFundamentals(allTickers) {
-  tvFundCache = {};
-  const usTickers = allTickers.filter(t => !t.endsWith('.TO'));
-  const caTickers = allTickers.filter(t =>  t.endsWith('.TO')).map(t => t.replace('.TO', ''));
+    const marketCap = km.marketCapTTM ?? null;                             // raw USD
+    const pe        = km.peRatioTTM   ?? null;                             // ratio
+    const roe       = km.roeTTM != null ? km.roeTTM * 100 : null;         // decimal→%
+    // freeCashFlowPerShareTTM sign = total FCF sign (positive shares outstanding)
+    const fcf       = km.freeCashFlowPerShareTTM ?? null;
 
-  // ── Correct TV Scanner request format ────────────────────────────────────────
-  // Must use filter→in_range NOT symbols→tickers (which requires "NASDAQ:AAPL" prefixes).
-  // Only corsproxy.io forwards POST bodies; allorigins.win is GET-only and drops the body.
-  function buildTVBody(chunk, chunkSize) {
-    return JSON.stringify({
-      columns: TV_FUND_COLUMNS,
-      filter:  [{ left: 'name', operation: 'in_range', right: chunk }],
-      options: { lang: 'en' },
-      range:   [0, chunkSize + 5],            // slight buffer
-      sort:    { sortBy: 'name', sortOrder: 'asc' },
-    });
-  }
-
-  function parseTVItem(item, market) {
-    const sym = item.s.split(':')[1];          // "NASDAQ:AAPL" → "AAPL"
-    const [marketCap, pe, roe, epsGrowth, fcf, grossMargin, revenueGrowth, perf5y] = item.d || [];
-    return {
-      key: market === 'canada' ? sym + '.TO' : sym,
-      data: {
-        marketCap:     marketCap    ?? null,
-        pe:            pe           ?? null,
-        roe:           roe          != null ? roe          * 100 : null,
-        epsGrowth:     epsGrowth    != null ? epsGrowth    * 100 : null,
-        fcf:           fcf          ?? null,
-        grossMargin:   grossMargin  != null ? grossMargin  * 100 : null,
-        revenueGrowth: revenueGrowth!= null ? revenueGrowth* 100 : null,
-        perf5Y:        perf5y       ?? null,  // TV already returns this in %
-      },
-    };
-  }
-
-  async function scanMarket(tickers, market) {
-    if (!tickers.length) return;
-    const CHUNK = 150;
-    for (let i = 0; i < tickers.length; i += CHUNK) {
-      if (ltStop) return;
-      const chunk  = tickers.slice(i, i + CHUNK);
-      const tvUrl  = `https://scanner.tradingview.com/${market}/scan`;
-      const body   = buildTVBody(chunk, chunk.length);
-
-      // Only corsproxy.io reliably forwards POST bodies to external APIs
-      const proxies = [
-        `https://corsproxy.io/?url=${encodeURIComponent(tvUrl)}`,
-      ];
-      let success = false;
-      for (const proxy of proxies) {
-        try {
-          const res = await fetch(proxy, {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body,
-            signal:  AbortSignal.timeout(28000),
-          });
-          if (!res.ok) { console.warn(`TV ${market} HTTP ${res.status}`); continue; }
-          const text = await res.text();
-          if (!text.trim().startsWith('{')) { console.warn(`TV ${market} non-JSON`); continue; }
-          const json = JSON.parse(text);
-          const rows = json.data || [];
-          if (!rows.length) { console.warn(`TV ${market} chunk ${i}: 0 rows returned`); }
-          for (const item of rows) {
-            const { key, data } = parseTVItem(item, market);
-            tvFundCache[key] = data;
-          }
-          console.log(`TV ${market} chunk ${i}: ${rows.length} rows`);
-          success = true;
-          break;
-        } catch(e) { console.warn(`TV ${market} chunk ${i}:`, e.message); }
+    let grossMargin = null, epsGrowth = null;
+    if (is?.length > 0) {
+      // grossProfitRatio = gross profit / revenue (FMP already computes this)
+      grossMargin = is[0].grossProfitRatio != null ? is[0].grossProfitRatio * 100 : null;
+      // EPS diluted YoY growth
+      if (is.length >= 2 && is[1].epsdiluted && is[1].epsdiluted !== 0) {
+        epsGrowth = ((is[0].epsdiluted - is[1].epsdiluted) / Math.abs(is[1].epsdiluted)) * 100;
       }
-      if (!success) console.warn(`TV ${market} chunk ${i}: all proxies failed`);
     }
-  }
-
-  // US and CA scanned in parallel — 2 round-trips total regardless of ticker count
-  await Promise.all([
-    scanMarket(usTickers, 'america'),
-    scanMarket(caTickers, 'canada'),
-  ]);
-  console.log(`TV fundamentals loaded: ${Object.keys(tvFundCache).length}/${allTickers.length} tickers`);
-  return tvFundCache;
+    return { marketCap, pe, roe, fcf, grossMargin, epsGrowth };
+  } catch(e) { console.warn(`FMP ${ticker}:`, e.message); return null; }
 }
 
 // Fetch 5-year performance separately from OHLCV (already fetched, pass it in)
@@ -853,14 +792,7 @@ async function runLongTermScreen() {
 
   await fetchCADUSD();
 
-  // ── Step 1: Pre-fetch ALL fundamentals via TradingView Scanner (2 requests total) ──
-  document.getElementById('ltPhase').textContent = 'Loading fundamentals from TradingView…';
-  document.getElementById('ltCurrentTicker').textContent = '…';
-  await fetchAllTVFundamentals(allTickers);
-  const tvHits = Object.keys(tvFundCache).length;
-  console.log(`TV fundamentals loaded: ${tvHits}/${allTickers.length} tickers`);
-
-  // ── Step 2: Screen tickers for technical signals ──────────────────────────────
+  // Two-phase: technical checks for all tickers → FMP fundamentals only for passing tickers
   const BATCH = 3;
   for (let i = 0; i < allTickers.length && !ltStop; i += BATCH) {
     const batch = allTickers.slice(i, i + BATCH);
@@ -873,18 +805,17 @@ async function runLongTermScreen() {
     await Promise.all(batch.map(async (ticker) => {
       if (ltStop) return;
       try {
-        // TV cache has fundamentals for most tickers; Yahoo Finance only as fallback
-        const tvFund = tvFundCache?.[ticker] ?? null;
-        if (!tvFund) console.warn(`TV cache MISS: ${ticker} — falling back to Yahoo Finance`);
-        const [ohlcv, yFund] = await Promise.all([
-          fetchOHLCV(ticker),
-          tvFund ? Promise.resolve(null) : fetchFundamentals(ticker), // skip Yahoo if TV hit
-        ]);
-        const fundRaw = tvFund || yFund;
-        if (!fundRaw) console.warn(`No fundamental data at all for ${ticker}`);
-        // 5Y perf: TradingView value preferred (matches TV screener); OHLCV as fallback
-        const fiveYearPerf = (fundRaw?.perf5Y != null) ? fundRaw.perf5Y : calc5YPerf(ohlcv);
-        // Map fundamentals to internal field names
+        // ── Phase 1: fetch OHLCV + run technical-only pre-check ──────────────
+        const ohlcv = await fetchOHLCV(ticker);
+        if (!ohlcv?.length) return;
+        const fiveYearPerf = calc5YPerf(ohlcv);
+        // Run analyzeStock with null fundamentals — hard technical rejects still apply.
+        // This gates FMP calls: only ~10-30 tickers out of 500+ will pass.
+        const techPass = analyzeStock(ticker, ohlcv, null, filters, fiveYearPerf);
+        if (!techPass) return; // failed technical or 5Y check — skip FMP entirely
+
+        // ── Phase 2: fetch FMP fundamentals only for technically passing tickers ─
+        const fundRaw = await fetchFMPFundamentals(ticker);
         const fundamentals = fundRaw ? {
           pe:          fundRaw.pe,
           marketCap:   fundRaw.marketCap,
@@ -1136,8 +1067,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   fetchCADUSD();
   renderWatchlist();
   renderLtNotes();
-  // Auto-run screener on page load so data is ready when user arrives
-  runLongTermScreen();
+  // Screener runs only when user clicks "▶ Run Screen" — not on page load
 });
 </script>
 <div id="syncBadge" class="sync-badge local">🟡 Local Only</div>

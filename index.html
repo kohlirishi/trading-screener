@@ -185,7 +185,7 @@
   <div class="cap-stat">Available: <strong id="availCap">$10,000.00</strong></div>
   <div class="cap-stat">Realized P&amp;L: <strong id="totalPnl" class="neutral">$0.00</strong></div>
   <div class="cap-stat">Unrealized P&amp;L: <strong id="unrealPnl" class="neutral">$0.00</strong></div>
-  <div class="currency-note">All values in USD · TSX prices converted at live CADUSD rate · Paper trading simulation · $100/trade · 5% TP · 2% SL</div>
+  <div class="currency-note">All values in USD · TSX prices converted at live CAD-USD Rate · Paper trading simulation · $100/trade · 5% TP · 2% SL</div>
 </div>
 
 <!-- NOTIFICATION -->
@@ -200,7 +200,7 @@
     <div class="card red"><div class="card-val" id="lossCount">0</div><div class="card-label">Stop Losses</div></div>
     <div class="card blue"><div class="card-val" id="winRate">—</div><div class="card-label">Win Rate</div></div>
     <div class="card gold"><div class="card-val" id="totalTradesCount">0</div><div class="card-label">Total Trades</div></div>
-    <div class="card gold"><div class="card-val" id="cadUsdDisplay">—</div><div class="card-label">CADUSD Rate</div></div>
+    <div class="card gold"><div class="card-val" id="cadUsdDisplay">—</div><div class="card-label">CAD-USD Rate</div></div>
   </div>
 
   <!-- AUTO SCREENER -->
@@ -214,7 +214,7 @@
       </div>
     </div>
     <div class="schedule-meta">
-      <span>📅 Runs daily: <strong>8:00 AM ET</strong> &amp; <strong>1:00 PM ET</strong> · Weekdays only · Skips market holidays</span>
+      <span>📅 Runs daily: <strong>8:00 AM EST</strong> &amp; <strong>1:00 PM EST</strong> · Weekdays only · Skips market holidays</span>
       <span id="lastRunInfo">Last run: <strong>never</strong></span>
       <span id="nextRunInfo">Next: <strong>calculating…</strong></span>
       <span>🎯 ATH: <strong>&gt;70%</strong> · Swing: <strong>&gt;50%</strong> · Partial: <strong>50% @ +3%</strong> · Final: <strong>+5%</strong> · Stop: <strong>−2% trail</strong></span>
@@ -749,6 +749,15 @@ async function loadStateFromCloud() {
 function nowET() { return new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })); }
 function todayET() { const et = nowET(); return `${et.getFullYear()}-${String(et.getMonth()+1).padStart(2,'0')}-${String(et.getDate()).padStart(2,'0')}`; }
 function timeET() { const et = nowET(); return `${String(et.getHours()).padStart(2,'0')}:${String(et.getMinutes()).padStart(2,'0')}`; }
+function formatTimeEST(t) {
+  if (!t || t === '—') return t;
+  const parts = t.split(':');
+  if (parts.length < 2) return t;
+  let h = parseInt(parts[0], 10), m = parts[1];
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return `${String(h).padStart(2,'0')}:${m} ${ampm} EST`;
+}
 function isWeekdayET() { const d = nowET().getDay(); return d >= 1 && d <= 5; }
 function isMarketOpen() {
   if (!isWeekdayET()) return false;
@@ -1158,7 +1167,7 @@ async function runScreener(scheduledTime) {
       regimeUS: regime.spyAbove ? '✓' : '⚠', regimeTSX: regime.xiuAbove ? '✓' : '⚠',
     });
     saveState(); renderAll();
-    notify(`Screener done (${runTime} ET): ${athCount} ATH · ${swingCount} Swing · ${pendingCount} pending · ${skippedCount} skipped`);
+    notify(`Screener done (${formatTimeEST(runTime)}): ${athCount} ATH · ${swingCount} Swing · ${pendingCount} pending · ${skippedCount} skipped`);
   } finally {
     screenerRunning = false; screenerStop = false;
     document.getElementById('screenerProgressWrap').style.display = 'none';
@@ -1198,17 +1207,21 @@ function renderAll() {
   updatePauseBanner();
 }
 
+function fmtUSD(n) {
+  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 function renderCapitalBar() {
   const deployed = deployedCapital();
   const pnl = realizedPnL();
   const unreal = unrealizedPnL();
-  document.getElementById('deployedCap').textContent = '$' + deployed.toFixed(2);
-  document.getElementById('availCap').textContent    = '$' + availableCapital().toFixed(2);
+  document.getElementById('deployedCap').textContent = '$' + fmtUSD(deployed);
+  document.getElementById('availCap').textContent    = '$' + fmtUSD(availableCapital());
   const pnlEl = document.getElementById('totalPnl');
-  pnlEl.textContent = (pnl >= 0 ? '+$' : '-$') + Math.abs(pnl).toFixed(2);
+  pnlEl.textContent = (pnl >= 0 ? '+$' : '-$') + fmtUSD(Math.abs(pnl));
   pnlEl.className   = pnl > 0 ? 'positive' : pnl < 0 ? 'negative' : 'neutral';
   const urEl = document.getElementById('unrealPnl');
-  urEl.textContent  = (unreal >= 0 ? '+$' : '-$') + Math.abs(unreal).toFixed(2);
+  urEl.textContent  = (unreal >= 0 ? '+$' : '-$') + fmtUSD(Math.abs(unreal));
   urEl.className    = unreal > 0 ? 'positive' : unreal < 0 ? 'negative' : 'neutral';
   if (cadUsdRate) document.getElementById('cadUsdDisplay').textContent = cadUsdRate.toFixed(4);
 }
@@ -1269,7 +1282,7 @@ function renderLive() {
       <td><div class="ticker-cell">${flagIcon(t.exchange)} ${t.ticker}${rvFlag}</div><div class="ticker-name">${escHtml(COMPANY_NAMES[t.ticker]||'')}</div>${partialTag}</td>
       <td>${typeBadge(t.type)}</td>
       <td>${pBadge(t.prob)}</td>
-      <td>${formatDate(t.buyDate)}<br><small style="color:#8b949e">${t.buyTime} ET</small></td>
+      <td>${formatDate(t.buyDate)}<br><small style="color:#8b949e">${formatTimeEST(t.buyTime)}</small></td>
       <td>$${t.buyPrice.toFixed(2)}</td>
       <td>$${cp.toFixed(2)}<br><small style="color:#8b949e">${chg>=0?'+':''}${chg.toFixed(2)}%</small></td>
       <td>$${t.invested}</td>
@@ -1389,7 +1402,7 @@ function renderRunLog() {
   const runs  = [...STATE.screenerRuns].reverse().slice(0, 30);
   if (!runs.length) { tbody.innerHTML = '<tr><td colspan="9" class="empty">No runs yet</td></tr>'; return; }
   tbody.innerHTML = runs.map(r => `<tr>
-    <td>${formatDate(r.date)}</td><td>${r.time} ET</td>
+    <td>${formatDate(r.date)}</td><td>${formatTimeEST(r.time)}</td>
     <td>${r.athCount||0}</td><td>${r.swingCount||0}</td>
     <td><span class="badge-profit">${r.tradedCount||0}</span></td>
     <td><span class="badge-pending">${r.pendingCount||0}</span></td>
@@ -1447,22 +1460,22 @@ function renderNotes() {
 function renderScheduleInfo() {
   const runs = STATE.screenerRuns, last = runs[runs.length - 1];
   if (last) {
-    document.getElementById('lastRunInfo').innerHTML = `Last run: <strong>${formatDate(last.date)} ${last.time} ET</strong> (${last.tradedCount||0} trades, ${last.pendingCount||0} pending)`;
+    document.getElementById('lastRunInfo').innerHTML = `Last run: <strong>${formatDate(last.date)} ${formatTimeEST(last.time)}</strong> (${last.tradedCount||0} trades, ${last.pendingCount||0} pending)`;
   }
-  if (!isWeekdayET()) { document.getElementById('nextRunInfo').innerHTML = `Next: <strong>Monday 8:00 AM ET</strong>`; return; }
+  if (!isWeekdayET()) { document.getElementById('nextRunInfo').innerHTML = `Next: <strong>Monday 8:00 AM EST</strong>`; return; }
   if (shouldSkipTodayUS() && shouldSkipTodayTSX()) { document.getElementById('nextRunInfo').innerHTML = `Next: <strong>tomorrow</strong> (holiday today)`; return; }
   const et = timeET();
   for (const t of SCHED_TIMES) {
-    if (et < t && !hasRunToday(t)) { document.getElementById('nextRunInfo').innerHTML = `Next: <strong>today ${t} ET</strong>`; return; }
+    if (et < t && !hasRunToday(t)) { document.getElementById('nextRunInfo').innerHTML = `Next: <strong>today ${t} EST</strong>`; return; }
   }
-  document.getElementById('nextRunInfo').innerHTML = `Next: <strong>tomorrow 8:00 AM ET</strong>`;
+  document.getElementById('nextRunInfo').innerHTML = `Next: <strong>tomorrow 8:00 AM EST</strong>`;
 }
 
 // ─── CLOCK + MARKET STATUS ────────────────────────────────────────────────────
 function updateClock() {
   const et = nowET();
   const time = et.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
-  document.getElementById('etTime').textContent = time + ' ET';
+  document.getElementById('etTime').textContent = time + ' EST';
   const badge = document.getElementById('marketStatus');
   if (isMarketOpen()) { badge.textContent = '● Market Open'; badge.className = 'market-badge open'; }
   else { badge.textContent = '○ Market Closed'; badge.className = 'market-badge closed'; }

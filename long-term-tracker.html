@@ -139,7 +139,7 @@
   <span>Scoring: <strong>Fundamental + Technical</strong> combined Strength %</span>
   <span>Hold horizon: <strong>6–24 months</strong></span>
   <span>Universe: <strong>S&amp;P 500 + TSX Large Cap</strong></span>
-  <span id="cadUsdInfo" style="margin-left:auto">CADUSD: <strong id="cadUsdLT">—</strong></span>
+  <span id="cadUsdInfo" style="margin-left:auto">CAD-USD: <strong id="cadUsdLT">—</strong></span>
 </div>
 
 <div class="main">
@@ -558,34 +558,69 @@ const FMP_ENABLED = true;
 
 async function fetchFMPFundamentals(ticker) {
   if (!FMP_ENABLED) return null;
-  const sym  = ticker.replace('.TO', ''); // FMP uses RY, not RY.TO
+  // Strip .TO suffix — FMP uses NYSE/NASDAQ symbol (RY not RY.TO).
+  // Most major TSX companies are dual-listed on NYSE so the same symbol works.
+  const sym  = ticker.replace('.TO', '');
   const base = 'https://financialmodelingprep.com/api/v3';
   const auth = `apikey=${FMP_API_KEY}`;
+
   try {
-    // 2 parallel requests per ticker: key-metrics (MCap, P/E, ROE, FCF) + income stmt (GrMgn, EPS growth)
-    const [kmRes, isRes] = await Promise.all([
-      fetch(`${base}/key-metrics-ttm/${sym}?${auth}`,                        { signal: AbortSignal.timeout(12000) }),
-      fetch(`${base}/income-statement/${sym}?limit=2&period=annual&${auth}`, { signal: AbortSignal.timeout(12000) }),
+    // ── 4 parallel fetches — all confirmed free-tier FMP endpoints ────────────
+    const [qRes, isRes, cfRes, bsRes] = await Promise.all([
+      fetch(`${base}/quote/${sym}?${auth}`,                                         { signal: AbortSignal.timeout(12000) }),
+      fetch(`${base}/income-statement/${sym}?limit=2&period=annual&${auth}`,        { signal: AbortSignal.timeout(12000) }),
+      fetch(`${base}/cash-flow-statement/${sym}?limit=1&period=annual&${auth}`,     { signal: AbortSignal.timeout(12000) }),
+      fetch(`${base}/balance-sheet-statement/${sym}?limit=1&period=annual&${auth}`, { signal: AbortSignal.timeout(12000) }),
     ]);
-    const km = kmRes.ok ? (await kmRes.json())?.[0] : null;
-    const is = isRes.ok ? (await isRes.json())       : null;
-    if (!km) { console.warn(`FMP ${ticker}: no key-metrics data`); return null; }
 
-    const marketCap = km.marketCapTTM ?? null;                             // raw USD
-    const pe        = km.peRatioTTM   ?? null;                             // ratio
-    const roe       = km.roeTTM != null ? km.roeTTM * 100 : null;         // decimal→%
-    // freeCashFlowPerShareTTM sign = total FCF sign (positive shares outstanding)
-    const fcf       = km.freeCashFlowPerShareTTM ?? null;
+    // Parse — FMP returns arrays for financial endpoints; error responses are plain objects
+    const [qRaw, isRaw, cfRaw, bsRaw] = await Promise.all([
+      qRes.ok  ? qRes.json()  : Promise.resolve(null),
+      isRes.ok ? isRes.json() : Promise.resolve(null),
+      cfRes.ok ? cfRes.json() : Promise.resolve(null),
+      bsRes.ok ? bsRes.json() : Promise.resolve(null),
+    ]);
+    const arr = d => (Array.isArray(d) && d.length) ? d : null;
+    const q  = arr(qRaw)?.[0]  ?? null; // quote
+    const is = arr(isRaw);               // income statements (2 years)
+    const cf = arr(cfRaw)?.[0]  ?? null; // cash flow statement
+    const bs = arr(bsRaw)?.[0]  ?? null; // balance sheet
 
+    if (!q) {
+      console.warn(`FMP ${sym}: quote empty or paywalled —`, JSON.stringify(qRaw)?.slice(0, 120));
+      return null;
+    }
+
+    // ── Market Cap & P/E from quote ───────────────────────────────────────────
+    const marketCap = q.marketCap ?? null;  // raw USD
+    const pe        = q.pe        ?? null;  // trailing P/E
+
+    // ── FCF from cash flow statement ──────────────────────────────────────────
+    // FMP stores capex as a negative number; freeCashFlow = operatingCF + capex
+    const fcf = cf?.freeCashFlow
+             ?? (cf?.operatingCashFlow != null && cf?.capitalExpenditure != null
+                 ? cf.operatingCashFlow + cf.capitalExpenditure
+                 : null);
+
+    // ── ROE = Net Income / Stockholders Equity ────────────────────────────────
+    const netIncome = is?.[0]?.netIncome              ?? null;
+    const equity    = bs?.totalStockholdersEquity     ?? bs?.totalEquity ?? null;
+    const roe = (netIncome != null && equity && equity !== 0)
+               ? (netIncome / equity) * 100
+               : null;
+
+    // ── Gross Margin & EPS Growth from income statement ───────────────────────
     let grossMargin = null, epsGrowth = null;
     if (is?.length > 0) {
-      // grossProfitRatio = gross profit / revenue (FMP already computes this)
+      // FMP pre-computes grossProfitRatio = grossProfit / revenue
       grossMargin = is[0].grossProfitRatio != null ? is[0].grossProfitRatio * 100 : null;
-      // EPS diluted YoY growth
-      if (is.length >= 2 && is[1].epsdiluted && is[1].epsdiluted !== 0) {
-        epsGrowth = ((is[0].epsdiluted - is[1].epsdiluted) / Math.abs(is[1].epsdiluted)) * 100;
+      if (is.length >= 2) {
+        const e0 = is[0].epsdiluted, e1 = is[1].epsdiluted;
+        if (e0 != null && e1 && e1 !== 0) epsGrowth = ((e0 - e1) / Math.abs(e1)) * 100;
       }
     }
+
+    console.log(`FMP ${sym}: MCap=${marketCap ? (marketCap/1e9).toFixed(0)+'B' : 'N/A'} PE=${pe ?? 'N/A'} ROE=${roe?.toFixed(1) ?? 'N/A'}% FCF=${fcf ? (fcf/1e9).toFixed(1)+'B' : 'N/A'} GrMgn=${grossMargin?.toFixed(1) ?? 'N/A'}% EPSGr=${epsGrowth?.toFixed(1) ?? 'N/A'}%`);
     return { marketCap, pe, roe, fcf, grossMargin, epsGrowth };
   } catch(e) { console.warn(`FMP ${ticker}:`, e.message); return null; }
 }
@@ -846,7 +881,7 @@ async function runLongTermScreen() {
   document.getElementById('runLtBtn').disabled = false;
   document.getElementById('stopLtBtn').style.display = 'none';
   const now = new Date().toLocaleString('en-US', { timeZone: 'America/New_York', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
-  document.getElementById('ltLastRun').textContent = `Last run: ${now} ET · ${ltResults.length} stocks found`;
+  document.getElementById('ltLastRun').textContent = `Last run: ${now} EST · ${ltResults.length} stocks found`;
   document.getElementById('addWlBtn').disabled = false;
 }
 

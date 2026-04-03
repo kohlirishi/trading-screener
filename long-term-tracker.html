@@ -162,7 +162,7 @@
       <div class="filter-group">
         <label>Exchange</label>
         <select id="filterExchange">
-          <option value="all">All (US + CA)</option>
+          <option value="all" selected>All (US + CA)</option>
           <option value="US">US (S&amp;P 500)</option>
           <option value="TSX">CA (TSX Large Cap)</option>
         </select>
@@ -218,7 +218,7 @@
 
       <div class="filter-group">
         <label>Min Strength % (Score)</label>
-        <input type="number" id="filterMinScore" value="60" min="0" max="100" step="5"
+        <input type="number" id="filterMinScore" value="90" min="0" max="100" step="5"
           title="Minimum combined technical + fundamental score to show">
       </div>
 
@@ -911,6 +911,8 @@ document.addEventListener('DOMContentLoaded', () => {
   fetchCADUSD();
   renderWatchlist();
   renderLtNotes();
+  // Auto-run screener on page load so data is ready when user arrives
+  runLongTermScreen();
 });
 </script>
 </body>
